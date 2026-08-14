@@ -8,82 +8,53 @@ export const DEFAULT_SETTINGS = {
 };
 
 export function normalizeSettings(raw = {}) {
-  return {
-    reverseTimeline:
-      raw.reverseTimeline !== undefined
-        ? Boolean(raw.reverseTimeline)
-        : DEFAULT_SETTINGS.reverseTimeline,
-    collapsePrDescription:
-      raw.collapsePrDescription !== undefined
-        ? Boolean(raw.collapsePrDescription)
-        : DEFAULT_SETTINGS.collapsePrDescription,
-    showMergeBoxBelowDescription:
-      raw.showMergeBoxBelowDescription !== undefined
-        ? Boolean(raw.showMergeBoxBelowDescription)
-        : DEFAULT_SETTINGS.showMergeBoxBelowDescription,
-    commentBoxAtTop:
-      raw.commentBoxAtTop !== undefined
-        ? Boolean(raw.commentBoxAtTop)
-        : DEFAULT_SETTINGS.commentBoxAtTop,
-  };
-}
-
-function storageGet(area, keys) {
-  return new Promise((resolve, reject) => {
-    chrome.storage[area].get(keys, (items) => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-      } else {
-        resolve(items);
-      }
-    });
-  });
-}
-
-function storageSet(area, items) {
-  return new Promise((resolve, reject) => {
-    chrome.storage[area].set(items, () => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-      } else {
-        resolve();
-      }
-    });
-  });
-}
-
-export async function getSettings() {
-  try {
-    const stored = (await storageGet("sync", STORAGE_KEY))[STORAGE_KEY];
-    return stored && typeof stored === "object"
-      ? normalizeSettings(stored)
-      : { ...DEFAULT_SETTINGS };
-  } catch {
-    const stored = (await storageGet("local", STORAGE_KEY))[STORAGE_KEY];
-    return stored && typeof stored === "object"
-      ? normalizeSettings(stored)
-      : { ...DEFAULT_SETTINGS };
+  const normalized = {};
+  for (const key of Object.keys(DEFAULT_SETTINGS)) {
+    normalized[key] =
+      raw[key] !== undefined ? Boolean(raw[key]) : DEFAULT_SETTINGS[key];
   }
+  return normalized;
+}
+
+function readStoredSettings(area) {
+  return chrome.storage[area].get(STORAGE_KEY).then((items) => {
+    const stored = items[STORAGE_KEY];
+    return stored && typeof stored === "object"
+      ? normalizeSettings(stored)
+      : { ...DEFAULT_SETTINGS };
+  });
+}
+
+function writeSettings(area, settings) {
+  return chrome.storage[area].set({ [STORAGE_KEY]: settings });
+}
+
+export function getSettings() {
+  return readStoredSettings("sync").catch(() => readStoredSettings("local"));
 }
 
 export async function saveSettings(partial) {
   const next = normalizeSettings({ ...(await getSettings()), ...partial });
-  const payload = { [STORAGE_KEY]: next };
   try {
-    await storageSet("sync", payload);
+    await writeSettings("sync", next);
   } catch {
-    await storageSet("local", payload);
+    await writeSettings("local", next);
   }
   return next;
 }
 
 export async function ensureDefaultSettings() {
-  const stored = await storageGet("sync", STORAGE_KEY).catch(() => ({}));
+  let stored = {};
+  try {
+    stored = await chrome.storage.sync.get(STORAGE_KEY);
+  } catch {
+    // Sync unavailable (e.g. disabled) — fall through and try to seed local.
+  }
   if (stored[STORAGE_KEY] == null) {
-    await storageSet("sync", { [STORAGE_KEY]: { ...DEFAULT_SETTINGS } }).catch(
-      async () => {
-        await storageSet("local", { [STORAGE_KEY]: { ...DEFAULT_SETTINGS } });
-      },
-    );
+    try {
+      await writeSettings("sync", { ...DEFAULT_SETTINGS });
+    } catch {
+      await writeSettings("local", { ...DEFAULT_SETTINGS });
+    }
   }
 }

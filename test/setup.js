@@ -1,6 +1,7 @@
 /**
  * Minimal chrome.storage / chrome.runtime mock backed by in-memory Maps,
- * with test hooks for simulating storage failures.
+ * with test hooks for simulating storage failures. Mirrors Chrome MV3's
+ * promise-based storage API (callback-less calls return Promises).
  */
 
 function createArea() {
@@ -9,39 +10,29 @@ function createArea() {
     __store: store,
     __failGet: false,
     __failSet: false,
-    get(keys, callback) {
+    get(keys) {
+      if (area.__failGet) {
+        return Promise.reject(new Error("mock storage get failed"));
+      }
       const items = {};
-      if (!area.__failGet) {
-        if (typeof keys === "string") {
-          items[keys] = store.get(keys);
-        } else if (Array.isArray(keys)) {
-          for (const key of keys) items[key] = store.get(key);
-        } else if (keys && typeof keys === "object") {
-          for (const [key, fallback] of Object.entries(keys)) {
-            const value = store.get(key);
-            items[key] = value === undefined ? fallback : value;
-          }
+      if (typeof keys === "string") {
+        items[keys] = store.get(keys);
+      } else if (Array.isArray(keys)) {
+        for (const key of keys) items[key] = store.get(key);
+      } else if (keys && typeof keys === "object") {
+        for (const [key, fallback] of Object.entries(keys)) {
+          const value = store.get(key);
+          items[key] = value === undefined ? fallback : value;
         }
       }
-      const error = area.__failGet ? { message: "mock storage get failed" } : null;
-      chrome.runtime.lastError = error;
-      try {
-        callback(items);
-      } finally {
-        chrome.runtime.lastError = null;
-      }
+      return Promise.resolve(items);
     },
-    set(items, callback = () => {}) {
-      const error = area.__failSet ? { message: "mock storage set failed" } : null;
-      if (!area.__failSet) {
-        for (const [key, value] of Object.entries(items)) store.set(key, value);
+    set(items) {
+      if (area.__failSet) {
+        return Promise.reject(new Error("mock storage set failed"));
       }
-      chrome.runtime.lastError = error;
-      try {
-        callback();
-      } finally {
-        chrome.runtime.lastError = null;
-      }
+      for (const [key, value] of Object.entries(items)) store.set(key, value);
+      return Promise.resolve();
     },
   };
   return area;

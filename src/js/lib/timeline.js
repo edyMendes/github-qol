@@ -11,7 +11,7 @@ export function getDirectTimelineItems(container, selector) {
   return [...container.children].filter((child) => child.matches(selector));
 }
 
-export function saveTimelineGids(container, selector) {
+function saveTimelineGids(container, selector) {
   const items = getDirectTimelineItems(container, selector);
   const gids = items
     .map((item) => item.getAttribute("data-gid") ?? "")

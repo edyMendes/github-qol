@@ -3,7 +3,6 @@ import {
   createSortButton,
   createSortRow,
   getSortButton,
-  getSortRow,
   placeSortRow,
   setSortDirection,
   SORT_BUTTON_ID,

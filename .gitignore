@@ -1,1 +1,5 @@
 node_modules/
+
+# Build artifacts (regenerate with `npm run build`)
+src/js/*.min.js
+src/css/outputTailwind.css
