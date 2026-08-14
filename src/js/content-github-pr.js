@@ -6,53 +6,24 @@
  * - Collapse long PR descriptions
  * - Merge status box below the PR description
  * - Comment box at the top of the timeline
+ *
+ * Pure DOM logic lives in ./lib/{timeline,placement}.js; settings in
+ * ./settings.js. esbuild inlines everything into one IIFE.
  */
 
-// ---------------------------------------------------------------------------
-// Settings (kept self-contained so the content bundle stays a single IIFE)
-// ---------------------------------------------------------------------------
-
-const STORAGE_KEY = "githubQolSettings";
-
-const DEFAULT_SETTINGS = {
-  reverseTimeline: true,
-  collapsePrDescription: true,
-  showMergeBoxBelowDescription: true,
-  commentBoxAtTop: true,
-};
-
-function normalizeSettings(raw = {}) {
-  return {
-    reverseTimeline:
-      raw.reverseTimeline !== undefined
-        ? Boolean(raw.reverseTimeline)
-        : DEFAULT_SETTINGS.reverseTimeline,
-    collapsePrDescription:
-      raw.collapsePrDescription !== undefined
-        ? Boolean(raw.collapsePrDescription)
-        : DEFAULT_SETTINGS.collapsePrDescription,
-    showMergeBoxBelowDescription:
-      raw.showMergeBoxBelowDescription !== undefined
-        ? Boolean(raw.showMergeBoxBelowDescription)
-        : DEFAULT_SETTINGS.showMergeBoxBelowDescription,
-    commentBoxAtTop:
-      raw.commentBoxAtTop !== undefined
-        ? Boolean(raw.commentBoxAtTop)
-        : DEFAULT_SETTINGS.commentBoxAtTop,
-  };
-}
-
-function storageGet(area, keys) {
-  return new Promise((resolve, reject) => {
-    chrome.storage[area].get(keys, (items) => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-      } else {
-        resolve(items);
-      }
-    });
-  });
-}
+import { STORAGE_KEY, DEFAULT_SETTINGS, normalizeSettings } from "./settings.js";
+import {
+  collectTimelineItems,
+  getDirectTimelineItems,
+  restoreTimelineOrder,
+  reverseTimelineContainer,
+} from "./lib/timeline.js";
+import {
+  findTimelineItemFor,
+  findCommentWrapper,
+  isPlacedBeforeTimelineItems,
+  isLastChildOf,
+} from "./lib/placement.js";
 
 // ---------------------------------------------------------------------------
 // Selectors and constants
@@ -69,6 +40,8 @@ const MERGEBOX_SELECTOR = '[data-testid="mergebox-partial"]';
 const COMMENT_FIELD_SELECTOR = "#new_comment_field";
 const COMMENT_FORM_SELECTOR =
   "form.js-new-comment-form, form#new_comment_form, form[data-testid='new-comment-form']";
+const COMMENT_WRAPPER_STOP_SELECTOR =
+  "main, [data-turbo-body], [data-turbo-permanent], .js-discussion, .pull-discussion-timeline";
 
 const DESC_COLLAPSED_CLASS = "gqol-desc-collapsed";
 const DESC_WRAP_CLASS = "gqol-desc-wrap";
@@ -88,6 +61,7 @@ const COMMENT_BOX_AT_TOP_CLASS = "gqol-comment-box-at-top";
 
 const INITIAL_RETRY_DELAYS = [0, 800, 2000, 5000, 10000, 20000, 45000];
 const POST_CHANGE_RETRY_DELAYS = [0, 200, 800, 2000];
+const OBSERVER_SETTLE_LINGER_MS = 60000;
 
 const SKELETON_SELECTOR =
   "batch-deferred-content .Skeleton, .commit-build-statuses .Skeleton, .js-updatable-content .Skeleton";
@@ -113,6 +87,7 @@ let postChangeRetryTimeouts = [];
 let observedTimelineContainer = null;
 let globalMutationObserver = null;
 let globalObserverStartedAt = 0;
+let observerSettledAt = null;
 
 let cachedSettings = null;
 let lastUrl = "";
@@ -125,22 +100,51 @@ let hydrationStartedAt = 0;
 let statusRefreshInterval = null;
 
 // ---------------------------------------------------------------------------
-// Page helpers
+// Per-pass DOM cache
+//
+// One revalidation pass used to re-query the same nodes (timeline items,
+// container, description, merge box) 3-5 times each. The cache collapses
+// that to one lookup per feature; it is reset whenever the DOM may have
+// changed (start of pass, after each feature, hydration ticks, navigation,
+// storage changes).
 // ---------------------------------------------------------------------------
+
+let domCache = null;
+
+function resetDomCache() {
+  domCache = null;
+}
+
+function getDomCache() {
+  if (domCache) return domCache;
+
+  const discussionRoot =
+    document.querySelector(DISCUSSION_SELECTOR) ??
+    document.querySelector(TIMELINE_PARTIAL_SELECTOR) ??
+    document.body;
+
+  const timelineRoot =
+    document.querySelector(TIMELINE_PARTIAL_SELECTOR) ??
+    document.querySelector(DISCUSSION_SELECTOR) ??
+    document.body;
+
+  domCache = {
+    discussionRoot,
+    timelineItems: collectTimelineItems(timelineRoot, TIMELINE_ITEM_SELECTOR),
+    timelineContainer: findTimelineContainerUncached(),
+  };
+  return domCache;
+}
 
 function isPullRequestPage() {
   return /^\/[^/]+\/[^/]+\/pull\/\d+/.test(location.pathname);
 }
 
 function getDiscussionRoot() {
-  return (
-    document.querySelector(DISCUSSION_SELECTOR) ??
-    document.querySelector(TIMELINE_PARTIAL_SELECTOR) ??
-    document.body
-  );
+  return getDomCache().discussionRoot;
 }
 
-function findTimelineContainer() {
+function findTimelineContainerUncached() {
   const partial = document.querySelector(TIMELINE_PARTIAL_SELECTOR);
   if (partial) return partial;
 
@@ -166,18 +170,12 @@ function findTimelineContainer() {
   return best ?? items[0].parentElement;
 }
 
-function getTimelineItems() {
-  const root =
-    document.querySelector(TIMELINE_PARTIAL_SELECTOR) ??
-    document.querySelector(DISCUSSION_SELECTOR) ??
-    document.body;
-  return [...root.querySelectorAll(TIMELINE_ITEM_SELECTOR)];
+function findTimelineContainer() {
+  return getDomCache().timelineContainer;
 }
 
-function getDirectTimelineItems(container) {
-  return [...container.children].filter((child) =>
-    child.matches(TIMELINE_ITEM_SELECTOR),
-  );
+function getTimelineItems() {
+  return getDomCache().timelineItems;
 }
 
 // ---------------------------------------------------------------------------
@@ -273,32 +271,11 @@ function undoReverseTimeline() {
   hydrationStartedAt = 0;
 
   document.querySelectorAll('[data-gqol-reverse="1"]').forEach((container) => {
-    restoreTimelineOrder(container);
+    if (restoreTimelineOrder(container, TIMELINE_ITEM_SELECTOR)) {
+      schedulePostChangeRetries(container);
+    }
   });
-}
-
-function restoreTimelineOrder(container) {
-  const savedGids = container.getAttribute("data-gqol-timeline-gids");
-  const items = getDirectTimelineItems(container);
-
-  if (savedGids) {
-    const gids = savedGids.split("|");
-    const byGid = new Map(
-      items.map((item) => [item.getAttribute("data-gid") ?? "", item]),
-    );
-    for (const gid of gids) {
-      const item = byGid.get(gid);
-      if (item) container.appendChild(item);
-    }
-  } else if (container.getAttribute("data-gqol-reverse") === "1") {
-    if (items.length >= 2) {
-      [...items].reverse().forEach((item) => container.appendChild(item));
-    }
-  }
-
-  container.removeAttribute("data-gqol-timeline-gids");
-  container.removeAttribute("data-gqol-reverse");
-  schedulePostChangeRetries(container);
+  resetDomCache();
 }
 
 function observeTimelineContainer(container) {
@@ -324,7 +301,7 @@ function observeTimelineContainer(container) {
     if (timelineMutationTimeout) clearTimeout(timelineMutationTimeout);
     timelineMutationTimeout = setTimeout(() => {
       timelineMutationTimeout = null;
-      const firstItem = getDirectTimelineItems(container)[0];
+      const firstItem = getDirectTimelineItems(container, TIMELINE_ITEM_SELECTOR)[0];
       for (const item of addedItems) {
         if (firstItem && item !== firstItem) {
           container.insertBefore(item, firstItem);
@@ -343,6 +320,7 @@ function hydrateTimeline(container, onProgress) {
     hydrationStartedAt = startedAt;
 
     const tick = () => {
+      resetDomCache();
       onProgress?.();
       if (container.isConnected && timelineHasLoadingContent(container)) {
         if (Date.now() - startedAt >= 12000) {
@@ -359,21 +337,6 @@ function hydrateTimeline(container, onProgress) {
   });
 }
 
-function reverseContainer(container) {
-  const items = getDirectTimelineItems(container);
-  if (items.length < 2) return false;
-
-  if (!container.hasAttribute("data-gqol-reverse")) {
-    const gids = items.map((item) => item.getAttribute("data-gid") ?? "").join("|");
-    container.setAttribute("data-gqol-timeline-gids", gids);
-  }
-
-  [...items].reverse().forEach((item) => container.appendChild(item));
-  container.setAttribute("data-gqol-reverse", "1");
-  schedulePostChangeRetries(container);
-  return true;
-}
-
 async function applyReverseTimeline(enabled, settings) {
   if (!enabled) {
     undoReverseTimeline();
@@ -381,8 +344,7 @@ async function applyReverseTimeline(enabled, settings) {
     return false;
   }
 
-  const container =
-    document.querySelector(TIMELINE_PARTIAL_SELECTOR) ?? findTimelineContainer();
+  const container = findTimelineContainer();
   if (!container || getTimelineItems().length < 2) {
     updateStatus(settings);
     return false;
@@ -411,9 +373,11 @@ async function applyReverseTimeline(enabled, settings) {
     timelinePhase = "reversing";
     updateStatus(settings);
 
-    return reverseContainer(container)
-      ? (observeTimelineContainer(container), true)
-      : false;
+    const reversed = reverseTimelineContainer(container, TIMELINE_ITEM_SELECTOR);
+    if (reversed) schedulePostChangeRetries(container);
+    resetDomCache();
+
+    return reversed ? (observeTimelineContainer(container), true) : false;
   } finally {
     timelinePhase = null;
     hydrationStartedAt = 0;
@@ -429,8 +393,7 @@ async function applyReverseTimeline(enabled, settings) {
 function getStatusDescriptor(settings) {
   if (!settings.reverseTimeline || !isPullRequestPage()) return null;
 
-  const container =
-    document.querySelector(TIMELINE_PARTIAL_SELECTOR) ?? findTimelineContainer();
+  const container = findTimelineContainer();
   const items = getTimelineItems();
 
   if (container?.getAttribute("data-gqol-reverse") === "1") return null;
@@ -530,24 +493,40 @@ function updateStatus(settings) {
 // ---------------------------------------------------------------------------
 
 function getDescriptionElement() {
-  const root = getDiscussionRoot();
+  return getDomCache().descriptionEl ?? computeDescriptionElement();
+}
+
+function computeDescriptionElement() {
+  const cache = getDomCache();
+  const root = cache.discussionRoot;
   const direct =
     root.querySelector(PR_DESCRIPTION_TESTID_SELECTOR) ??
     root.querySelector(PR_DESCRIPTION_ID_SELECTOR);
-  if (direct) return direct;
-
-  const firstItem = getTimelineItems()[0];
-  if (firstItem) {
-    return (
-      firstItem.querySelector(PR_DESCRIPTION_TESTID_SELECTOR) ??
-      firstItem.querySelector(PR_DESCRIPTION_ID_SELECTOR) ??
-      firstItem
-    );
+  if (direct) {
+    cache.descriptionEl = direct;
+    return direct;
   }
-  return document.querySelector(PR_DESCRIPTION_TESTID_SELECTOR);
+
+  const firstItem = cache.timelineItems[0];
+  const fromItem = firstItem
+    ? (firstItem.querySelector(PR_DESCRIPTION_TESTID_SELECTOR) ??
+        firstItem.querySelector(PR_DESCRIPTION_ID_SELECTOR) ??
+        firstItem)
+    : document.querySelector(PR_DESCRIPTION_TESTID_SELECTOR);
+  if (fromItem) {
+    cache.descriptionEl = fromItem;
+  }
+  return fromItem;
 }
 
 function getDescriptionBody() {
+  const cache = getDomCache();
+  if (cache.descriptionBody !== undefined) return cache.descriptionBody;
+  cache.descriptionBody = computeDescriptionBody();
+  return cache.descriptionBody;
+}
+
+function computeDescriptionBody() {
   const root = getDiscussionRoot();
   const candidates = [
     root.querySelector(`${PR_DESCRIPTION_TESTID_SELECTOR} .markdown-body`),
@@ -688,6 +667,7 @@ function undoCollapseDescription() {
       wrap.remove();
     }
   });
+  resetDomCache();
 }
 
 const CHEVRON_DOWN_SVG =
@@ -727,12 +707,14 @@ function scrollDescriptionIntoView(target) {
 }
 
 function recheckCollapseEligibility(body) {
+  // Cheap connected/closest checks first; isTallBody forces a reflow so it
+  // only runs when everything else says the body might still need collapsing.
   return !(
     !body?.isConnected ||
     isDescriptionBodyLoading(body) ||
-    !isTallBody(body) ||
     body.closest(`.${DESC_BLOCK_CLASS}`) ||
-    (body.removeAttribute("data-gqol-desc-processed"), 0)
+    !isTallBody(body) ||
+    (body.removeAttribute("data-gqol-desc-processed"), false)
   );
 }
 
@@ -809,6 +791,7 @@ function collapseDescription(body) {
     requestAnimationFrame(() => alignFooterText(block, body));
   });
 
+  resetDomCache();
   return true;
 }
 
@@ -855,19 +838,20 @@ function applyCollapseDescription(enabled) {
 // ---------------------------------------------------------------------------
 
 function findMergeBox() {
-  return document.querySelector(MERGEBOX_SELECTOR);
-}
-
-function findTimelineItemFor(el) {
-  if (!el?.isConnected) return null;
-  return (
-    el.closest(".TimelineItem.js-comment-container") ??
-    el.closest(TIMELINE_ITEM_SELECTOR) ??
-    el.closest(".TimelineItem")
-  );
+  const cache = getDomCache();
+  if (cache.mergeBox !== undefined) return cache.mergeBox;
+  cache.mergeBox = document.querySelector(MERGEBOX_SELECTOR) ?? null;
+  return cache.mergeBox;
 }
 
 function findDescriptionContainer() {
+  const cache = getDomCache();
+  if (cache.descContainer !== undefined) return cache.descContainer;
+  cache.descContainer = computeDescriptionContainer();
+  return cache.descContainer;
+}
+
+function computeDescriptionContainer() {
   const root = getDiscussionRoot();
   let descEl =
     root.querySelector(PR_DESCRIPTION_TESTID_SELECTOR) ??
@@ -928,7 +912,8 @@ function restoreStrippedClasses(mergeBox) {
 }
 
 function positionMergeBoxStyles(descContainer, row, mergeBox) {
-  const anchorItem = findTimelineItemFor(row) ?? findTimelineItemFor(descContainer);
+  const anchorItem = findTimelineItemFor(row, TIMELINE_ITEM_SELECTOR) ??
+    findTimelineItemFor(descContainer, TIMELINE_ITEM_SELECTOR);
 
   if (descContainer?.isConnected && descContainer !== anchorItem) {
     descContainer.removeAttribute(MERGE_ANCHOR_ATTR);
@@ -987,12 +972,7 @@ function positionMergeBoxStyles(descContainer, row, mergeBox) {
 
 function isMergeBoxPlaced(mergeBox, descContainer) {
   const row = mergeBox.closest(`.${MERGEBOX_TIMELINE_ROW_CLASS}`) ?? mergeBox;
-  return Boolean(
-    descContainer &&
-      mergeBox &&
-      row.parentElement === descContainer &&
-      descContainer.lastElementChild === row,
-  );
+  return isLastChildOf(row, descContainer);
 }
 
 function restoreMergeBox(mergeBox) {
@@ -1026,6 +1006,7 @@ function restoreAllMergeBoxes() {
   document.querySelectorAll(`.${MERGEBOX_TIMELINE_ROW_CLASS}`).forEach((row) => {
     unwrapMergeRow(row);
   });
+  resetDomCache();
 }
 
 function applyMergeBoxBelowDescription(enabled) {
@@ -1065,6 +1046,7 @@ function applyMergeBoxBelowDescription(enabled) {
   mergeBox.classList.add(MERGEBOX_BELOW_DESC_CLASS);
   stripMergeSpacingClasses(mergeBox);
   positionMergeBoxStyles(descContainer, row, mergeBox);
+  resetDomCache();
   return true;
 }
 
@@ -1073,48 +1055,16 @@ function applyMergeBoxBelowDescription(enabled) {
 // ---------------------------------------------------------------------------
 
 function findCommentForm() {
+  const cache = getDomCache();
+  if (cache.commentForm !== undefined) return cache.commentForm;
   const field = document.querySelector(COMMENT_FIELD_SELECTOR);
-  const form = field?.closest("form");
-  if (form) return form;
-  return document.querySelector(COMMENT_FORM_SELECTOR);
-}
-
-/**
- * Climb from the comment form to its top-level wrapper: the section that holds
- * the whole composer and sits as a sibling of the timeline container. Stops
- * before climbing into anything that also contains the timeline items, the
- * merge box, or a known page container.
- */
-function findCommentWrapper(form) {
-  if (!form?.isConnected) return null;
-
-  let node = form;
-  while (node.parentElement) {
-    const parent = node.parentElement;
-    if (
-      parent === document.body ||
-      parent.matches(
-        "main, [data-turbo-body], [data-turbo-permanent], .js-discussion, .pull-discussion-timeline",
-      ) ||
-      parent.querySelector(TIMELINE_ITEM_SELECTOR) ||
-      (parent.querySelector(MERGEBOX_SELECTOR) &&
-        !node.querySelector(MERGEBOX_SELECTOR))
-    ) {
-      break;
-    }
-    node = parent;
-  }
-  return node;
+  const form = field?.closest("form") ?? document.querySelector(COMMENT_FORM_SELECTOR);
+  cache.commentForm = form ?? null;
+  return cache.commentForm;
 }
 
 function isCommentBoxPlaced(wrapper, container) {
-  if (!wrapper?.isConnected || wrapper.parentElement !== container) return false;
-  let sibling = wrapper.previousElementSibling;
-  while (sibling) {
-    if (sibling.matches(TIMELINE_ITEM_SELECTOR)) return false;
-    sibling = sibling.previousElementSibling;
-  }
-  return true;
+  return isPlacedBeforeTimelineItems(wrapper, container, TIMELINE_ITEM_SELECTOR);
 }
 
 function restoreCommentBox(wrapper) {
@@ -1132,6 +1082,7 @@ function restoreAllCommentBoxes() {
   document
     .querySelectorAll(`[${COMMENT_BOX_MOVED_ATTR}="1"]`)
     .forEach((wrapper) => restoreCommentBox(wrapper));
+  resetDomCache();
 }
 
 function applyCommentBoxAtTop(enabled) {
@@ -1141,11 +1092,15 @@ function applyCommentBoxAtTop(enabled) {
   }
 
   const form = findCommentForm();
-  const container =
-    document.querySelector(TIMELINE_PARTIAL_SELECTOR) ?? findTimelineContainer();
+  const container = findTimelineContainer();
   if (!form || !container) return false;
 
-  const wrapper = findCommentWrapper(form);
+  const wrapper = findCommentWrapper(form, {
+    stopSelector: COMMENT_WRAPPER_STOP_SELECTOR,
+    timelineContainer: container,
+    timelineItem: getTimelineItems()[0] ?? null,
+    mergeBox: findMergeBox(),
+  });
   if (!wrapper) return false;
 
   if (isCommentBoxPlaced(wrapper, container)) {
@@ -1171,6 +1126,7 @@ function applyCommentBoxAtTop(enabled) {
 
   wrapper.setAttribute(COMMENT_BOX_MOVED_ATTR, "1");
   wrapper.classList.add(COMMENT_BOX_AT_TOP_CLASS);
+  resetDomCache();
   return true;
 }
 
@@ -1183,12 +1139,12 @@ async function getCachedSettings() {
   try {
     cachedSettings = await (async () => {
       try {
-        const stored = (await storageGet("sync", STORAGE_KEY))[STORAGE_KEY];
+        const stored = await storageGetSafe("sync", STORAGE_KEY);
         return stored && typeof stored === "object"
           ? normalizeSettings(stored)
           : { ...DEFAULT_SETTINGS };
       } catch {
-        const stored = (await storageGet("local", STORAGE_KEY))[STORAGE_KEY];
+        const stored = await storageGetSafe("local", STORAGE_KEY);
         return stored && typeof stored === "object"
           ? normalizeSettings(stored)
           : { ...DEFAULT_SETTINGS };
@@ -1201,12 +1157,23 @@ async function getCachedSettings() {
   return cachedSettings;
 }
 
+function storageGetSafe(area, key) {
+  return new Promise((resolve, reject) => {
+    chrome.storage[area].get(key, (items) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+      } else {
+        resolve(items[key]);
+      }
+    });
+  });
+}
+
 function needsWork(settings) {
   if (!isPullRequestPage()) return false;
 
   if (settings.reverseTimeline) {
-    const container =
-      document.querySelector(TIMELINE_PARTIAL_SELECTOR) ?? findTimelineContainer();
+    const container = findTimelineContainer();
     if (getTimelineItems().length >= 2) {
       if (container && container.getAttribute("data-gqol-reverse") !== "1") {
         return true;
@@ -1222,7 +1189,8 @@ function needsWork(settings) {
     if (!descEl && !body) return false;
     if (!body) return Boolean(descEl && isDescriptionLoading(descEl));
     if (isDescriptionBodyLoading(body)) return true;
-    if (isTallBody(body) && !body.closest(`.${DESC_BLOCK_CLASS}`)) return true;
+    // Cheap closest() before the reflow-forcing height measurement.
+    if (!body.closest(`.${DESC_BLOCK_CLASS}`) && isTallBody(body)) return true;
   }
 
   if (settings.showMergeBoxBelowDescription) {
@@ -1235,10 +1203,14 @@ function needsWork(settings) {
 
   if (settings.commentBoxAtTop) {
     const form = findCommentForm();
-    const container =
-      document.querySelector(TIMELINE_PARTIAL_SELECTOR) ?? findTimelineContainer();
+    const container = findTimelineContainer();
     if (form && container) {
-      const wrapper = findCommentWrapper(form);
+      const wrapper = findCommentWrapper(form, {
+        stopSelector: COMMENT_WRAPPER_STOP_SELECTOR,
+        timelineContainer: container,
+        timelineItem: getTimelineItems()[0] ?? null,
+        mergeBox: findMergeBox(),
+      });
       if (wrapper && !isCommentBoxPlaced(wrapper, container)) return true;
     }
   }
@@ -1250,6 +1222,7 @@ function stopGlobalObserver() {
   globalMutationObserver?.disconnect();
   globalMutationObserver = null;
   globalObserverStartedAt = 0;
+  observerSettledAt = null;
 }
 
 function ensureGlobalObserver() {
@@ -1282,12 +1255,20 @@ function ensureGlobalObserver() {
     .catch(() => {});
 }
 
+function cancelInitialRetries() {
+  for (const timeout of initialRetryTimeouts) clearTimeout(timeout);
+  initialRetryTimeouts = [];
+}
+
 function runFeature(name, fn) {
   try {
     return fn();
   } catch (error) {
     console.warn(`GitHub QoL: ${name} failed.`, error);
     return false;
+  } finally {
+    // Features mutate the DOM; the next feature must see fresh nodes.
+    resetDomCache();
   }
 }
 
@@ -1308,12 +1289,13 @@ async function applyAll() {
     }
 
     document.documentElement.setAttribute("data-gqol-active", "1");
+    resetDomCache();
     const settings = await getCachedSettings();
 
     nudgeDescription();
     updateStatus(settings);
 
-    const collapsed = runFeature("collapse-description", () =>
+    const collapsed = await runFeature("collapse-description", () =>
       applyCollapseDescription(settings.collapsePrDescription),
     );
     const mergeBoxDone = runFeature("mergebox-below-description", () =>
@@ -1327,12 +1309,21 @@ async function applyAll() {
     );
 
     if (needsWork(settings)) {
+      observerSettledAt = null;
       ensureGlobalObserver();
-      updateStatus(settings);
     } else {
-      stopGlobalObserver();
-      updateStatus(settings);
+      // Everything is applied and stable: stop burning the initial retry
+      // schedule, and let the global observer die after a short linger
+      // window that still catches late GitHub re-renders.
+      cancelInitialRetries();
+      if (globalMutationObserver) {
+        observerSettledAt ??= Date.now();
+        if (Date.now() - observerSettledAt > OBSERVER_SETTLE_LINGER_MS) {
+          stopGlobalObserver();
+        }
+      }
     }
+    updateStatus(settings);
 
     return reversed || collapsed || mergeBoxDone || commentBoxDone;
   } finally {
@@ -1344,17 +1335,17 @@ function scheduleRevalidate() {
   if (revalidateTimeout) return;
   revalidateTimeout = setTimeout(() => {
     revalidateTimeout = null;
+    resetDomCache();
     applyAll().catch((error) => console.warn("GitHub QoL:", error));
   }, 600);
 }
 
 function scheduleInitialPasses() {
-  for (const timeout of initialRetryTimeouts) clearTimeout(timeout);
-  initialRetryTimeouts = [];
-
+  cancelInitialRetries();
   for (const delay of INITIAL_RETRY_DELAYS) {
     initialRetryTimeouts.push(
       setTimeout(() => {
+        resetDomCache();
         applyAll().catch((error) => console.warn("GitHub QoL:", error));
       }, delay),
     );
@@ -1366,6 +1357,7 @@ function onNavigation() {
   if (url !== lastUrl) {
     lastUrl = url;
     lastDescriptionNudgeAt = 0;
+    resetDomCache();
     undoReverseTimeline();
     undoCollapseDescription();
     stopDescriptionObserver();
@@ -1392,5 +1384,6 @@ document.addEventListener("pjax:end", onNavigation);
 chrome.storage.onChanged.addListener((changes, area) => {
   if ((area !== "sync" && area !== "local") || !changes.githubQolSettings) return;
   cachedSettings = null;
+  resetDomCache();
   scheduleRevalidate();
 });
