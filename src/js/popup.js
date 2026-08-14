@@ -1,6 +1,5 @@
 import { getSettings, saveSettings } from "./settings.js";
 
-const reverseTimelineInput = document.getElementById("setting-reverse-timeline");
 const collapseDescriptionInput = document.getElementById("setting-collapse-description");
 const mergeboxBelowDescriptionInput = document.getElementById("setting-mergebox-below-description");
 const commentBoxAtTopInput = document.getElementById("setting-comment-box-at-top");
@@ -18,7 +17,6 @@ function showStatus(message) {
 
 async function persist() {
   await saveSettings({
-    reverseTimeline: reverseTimelineInput.checked,
     collapsePrDescription: collapseDescriptionInput.checked,
     showMergeBoxBelowDescription: mergeboxBelowDescriptionInput.checked,
     commentBoxAtTop: commentBoxAtTopInput.checked,
@@ -26,14 +24,12 @@ async function persist() {
   showStatus("Saved");
 }
 
-reverseTimelineInput.addEventListener("change", persist);
 collapseDescriptionInput.addEventListener("change", persist);
 mergeboxBelowDescriptionInput.addEventListener("change", persist);
 commentBoxAtTopInput.addEventListener("change", persist);
 
 (async () => {
   const settings = await getSettings();
-  reverseTimelineInput.checked = settings.reverseTimeline;
   collapseDescriptionInput.checked = settings.collapsePrDescription;
   mergeboxBelowDescriptionInput.checked = settings.showMergeBoxBelowDescription;
   commentBoxAtTopInput.checked = settings.commentBoxAtTop;

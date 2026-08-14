@@ -64,12 +64,56 @@ export function isPlacedBeforeTimelineItems(wrapper, container, selector) {
 }
 
 /**
- * True when `row` is the last child of `parent` (used to confirm the merge
- * box sits directly below the description container).
+ * Climb from the mergebox partial to its top-level wrapper in the timeline
+ * flow — the node whose parent is the flow container or has timeline items
+ * as siblings. Moving this unit (instead of the bare partial) preserves
+ * GitHub's native wrapper classes (e.g. the React "Stack" merge box) so the
+ * box looks exactly like it does natively, just below the description.
  */
-export function isLastChildOf(row, parent) {
-  return Boolean(
-    parent && row && row.parentElement === parent &&
-      parent.lastElementChild === row,
+export function findMergeBoxUnit(mergeBox, container, itemSelector) {
+  if (!mergeBox?.isConnected || !container) return null;
+
+  let node = mergeBox;
+  while (node.parentElement) {
+    const parent = node.parentElement;
+    if (parent === container || parent === document.body) break;
+    if (
+      parent.matches?.(
+        "main, [data-turbo-body], [data-turbo-permanent], .js-discussion, .pull-discussion-timeline",
+      )
+    ) {
+      break;
+    }
+    const hasSiblingItem = [...parent.children].some(
+      (child) => child !== node && child.matches?.(itemSelector),
+    );
+    if (hasSiblingItem) break;
+    node = parent;
+  }
+  return node;
+}
+
+/**
+ * All descendants of `root` matching `selector` whose text matches
+ * `pattern`, collapsed to the outermost matching elements (nested matches
+ * are absorbed by their ancestor). Used to locate GitHub callouts that
+ * carry no stable selector, e.g. the guidelines/ProTip footer texts.
+ *
+ * `excludeContaining` drops candidates that contain elements matching
+ * that selector BEFORE collapsing, so a form (or a form-wrapping
+ * ancestor) never absorbs matches nested inside it.
+ */
+export function findElementsByText(root, pattern, selector, options = {}) {
+  if (!root?.querySelectorAll) return [];
+  const { excludeContaining = "" } = options;
+
+  let matches = [...root.querySelectorAll(selector)].filter((el) =>
+    pattern.test(el.textContent ?? ""),
+  );
+  if (excludeContaining) {
+    matches = matches.filter((el) => !el.querySelector(excludeContaining));
+  }
+  return matches.filter(
+    (el) => !matches.some((other) => other !== el && other.contains(el)),
   );
 }

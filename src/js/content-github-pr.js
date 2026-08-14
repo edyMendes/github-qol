@@ -11,7 +11,11 @@
  * ./settings.js. esbuild inlines everything into one IIFE.
  */
 
-import { STORAGE_KEY, DEFAULT_SETTINGS, normalizeSettings } from "./settings.js";
+import {
+  DEFAULT_SETTINGS,
+  getSettings,
+  saveSettings,
+} from "./settings.js";
 import {
   collectTimelineItems,
   getDirectTimelineItems,
@@ -21,9 +25,18 @@ import {
 import {
   findTimelineItemFor,
   findCommentWrapper,
+  findMergeBoxUnit,
+  findElementsByText,
   isPlacedBeforeTimelineItems,
-  isLastChildOf,
 } from "./lib/placement.js";
+import {
+  createSortButton,
+  createSortRow,
+  getSortButton,
+  placeSortRow,
+  setSortDirection,
+  SORT_ROW_CLASS,
+} from "./lib/sort-button.js";
 
 // ---------------------------------------------------------------------------
 // Selectors and constants
@@ -59,6 +72,12 @@ const STRIPPED_CLASS_PREFIXES = ["tmp-ml-", "tmp-pl-", "tmp-mr-", "tmp-pr-"];
 const COMMENT_BOX_MOVED_ATTR = "data-gqol-comment-box-moved";
 const COMMENT_BOX_AT_TOP_CLASS = "gqol-comment-box-at-top";
 
+const COMMENT_FOOTER_PATTERN =
+  /Remember,\s+contributions\s+to\s+this\s+repository|ProTip!/i;
+// Never move anything that contains form controls — only the helper texts.
+const COMMENT_FOOTER_GUARD_SELECTOR = "form, textarea, [contenteditable], button";
+const COMMENT_FOOTER_MOVED_ATTR = "data-gqol-comment-footer-moved";
+
 const INITIAL_RETRY_DELAYS = [0, 800, 2000, 5000, 10000, 20000, 45000];
 const POST_CHANGE_RETRY_DELAYS = [0, 200, 800, 2000];
 const OBSERVER_SETTLE_LINGER_MS = 60000;
@@ -74,6 +93,7 @@ const TIMELINE_STATUS_ID = "gqol-timeline-status";
 
 const mergeBoxAnchors = new WeakMap();
 const commentBoxAnchors = new WeakMap();
+const commentFooterAnchors = new WeakMap();
 
 let timelineMutationObserver = null;
 let timelineMutationTimeout = null;
@@ -86,7 +106,6 @@ let postChangeRetryTimeouts = [];
 
 let observedTimelineContainer = null;
 let globalMutationObserver = null;
-let globalObserverStartedAt = 0;
 let observerSettledAt = null;
 
 let cachedSettings = null;
@@ -137,7 +156,15 @@ function getDomCache() {
 }
 
 function isPullRequestPage() {
-  return /^\/[^/]+\/[^/]+\/pull\/\d+/.test(location.pathname);
+  // Conversation tab only — not /files, /commits, etc. Switching tabs must
+  // tear our changes down and re-apply when the conversation returns.
+  return /^\/[^/]+\/[^/]+\/pull\/\d+\/?$/.test(location.pathname);
+}
+
+function pageKey() {
+  // Hash-only changes (anchor jumps) are not navigations: skip the
+  // teardown/reapply cycle for them.
+  return location.pathname + location.search;
 }
 
 function getDiscussionRoot() {
@@ -253,6 +280,60 @@ function timelineNeedsHydration(container) {
 // ---------------------------------------------------------------------------
 // Reverse timeline
 // ---------------------------------------------------------------------------
+
+function handleSortClick(newestFirst) {
+  // Flip the global setting, then reapply immediately (the storage.onChanged
+  // listener also fires, but its pass is debounced; this one is instant).
+  saveSettings({ reverseTimeline: newestFirst })
+    .then(() => {
+      cachedSettings = null;
+      resetDomCache();
+      return applyAll();
+    })
+    .catch((error) => console.warn("GitHub QoL: could not save sort order.", error));
+}
+
+/**
+ * Stable anchor for the sort row: the earliest of (moved comment box,
+ * first timeline item) among the container's direct children. The
+ * descending comment box inserts itself directly before the first item —
+ * i.e. directly after the row — so flipping the sort direction moves the
+ * box around the row without ever moving the row itself.
+ */
+function findSortRowAnchor(container) {
+  const firstItem = findFirstTimelineItemChild(container);
+  const kids = [...container.children];
+  const box = kids.find((child) => child.hasAttribute(COMMENT_BOX_MOVED_ATTR));
+
+  if (!box) return firstItem ?? null;
+
+  const boxIdx = kids.indexOf(box);
+  const itemIdx = firstItem ? kids.indexOf(firstItem) : -1;
+  return itemIdx === -1 || boxIdx < itemIdx ? box : firstItem ?? null;
+}
+
+function ensureSortRow(settings) {
+  const container = findTimelineContainer();
+  if (!container) return false;
+
+  let button = getSortButton();
+  if (!button) {
+    button = createSortButton({ onClick: handleSortClick });
+  }
+
+  let row = button.closest(`.${SORT_ROW_CLASS}`);
+  if (!row) {
+    row = createSortRow(button);
+  }
+
+  placeSortRow(row, container, findSortRowAnchor(container));
+  setSortDirection(button, settings.reverseTimeline);
+  return true;
+}
+
+function removeSortRow() {
+  document.querySelectorAll(`.${SORT_ROW_CLASS}`).forEach((row) => row.remove());
+}
 
 function undoReverseTimeline() {
   if (timelineMutationObserver) {
@@ -876,9 +957,11 @@ function computeDescriptionContainer() {
 }
 
 function unwrapMergeRow(row) {
-  const mergeBox = row.querySelector(MERGEBOX_SELECTOR);
-  if (mergeBox) {
-    row.replaceWith(mergeBox);
+  // The row wraps exactly one unit (the merge box's top-level wrapper or
+  // the bare partial); put that unit back and drop the row.
+  const unit = row.firstElementChild;
+  if (unit) {
+    row.replaceWith(unit);
   } else {
     row.remove();
   }
@@ -970,19 +1053,43 @@ function positionMergeBoxStyles(descContainer, row, mergeBox) {
   });
 }
 
-function isMergeBoxPlaced(mergeBox, descContainer) {
+
+function findFirstTimelineItemChild(container) {
+  return [...(container?.children ?? [])].find((child) =>
+    child.matches(TIMELINE_ITEM_SELECTOR),
+  );
+}
+
+/**
+ * Placed = the merge row is the nearest non-item element directly before
+ * the container's first timeline item (i.e. right below the description
+ * block and the @copilot hint, right above the newest items).
+ */
+function isMergeBoxPlaced(mergeBox) {
   const row = mergeBox.closest(`.${MERGEBOX_TIMELINE_ROW_CLASS}`) ?? mergeBox;
-  return isLastChildOf(row, descContainer);
+  const container = findTimelineContainer();
+  if (!container || row.parentElement !== container) return false;
+
+  const firstItem = findFirstTimelineItemChild(container);
+  if (!firstItem) return row === container.lastElementChild;
+
+  let sibling = firstItem.previousElementSibling;
+  while (sibling && sibling !== row) {
+    if (sibling.matches(TIMELINE_ITEM_SELECTOR)) return false;
+    sibling = sibling.previousElementSibling;
+  }
+  return sibling === row;
 }
 
 function restoreMergeBox(mergeBox) {
   const row = mergeBox.closest(`.${MERGEBOX_TIMELINE_ROW_CLASS}`);
-  const node = row ?? mergeBox;
+  const unit = row?.firstElementChild ?? mergeBox;
   const anchor = mergeBoxAnchors.get(mergeBox);
 
   if (anchor?.parentNode) {
-    anchor.parentNode.insertBefore(node, anchor.nextSibling);
+    anchor.parentNode.insertBefore(unit, anchor.nextSibling);
     anchor.remove();
+    row?.remove();
   } else if (row) {
     unwrapMergeRow(row);
   }
@@ -1019,18 +1126,31 @@ function applyMergeBoxBelowDescription(enabled) {
   const descContainer = findDescriptionContainer();
   if (!mergeBox || !descContainer) return false;
 
+  // Move the merge box's TOP-LEVEL wrapper (e.g. the React "Stack" box),
+  // not the bare partial — the box keeps its native classes and therefore
+  // its native look, just below the description.
+  const container = findTimelineContainer() ?? document.body;
+  const unit = findMergeBoxUnit(mergeBox, container, TIMELINE_ITEM_SELECTOR) ?? mergeBox;
+  const isBarePartial = unit === mergeBox;
+
+  const styleUnit = () => {
+    if (isBarePartial) {
+      mergeBox.classList.add(MERGEBOX_BELOW_DESC_CLASS);
+      stripMergeSpacingClasses(mergeBox);
+    }
+  };
+
   let row = mergeBox.closest(`.${MERGEBOX_TIMELINE_ROW_CLASS}`);
   if (!row) {
     row = document.createElement("div");
     row.className = MERGEBOX_TIMELINE_ROW_CLASS;
-    mergeBox.parentNode?.insertBefore(row, mergeBox);
-    row.appendChild(mergeBox);
+    unit.parentNode?.insertBefore(row, unit);
+    row.appendChild(unit);
   }
 
-  if (isMergeBoxPlaced(mergeBox, descContainer)) {
+  if (isMergeBoxPlaced(mergeBox)) {
     mergeBox.setAttribute(MERGEBOX_MOVED_ATTR, "1");
-    mergeBox.classList.add(MERGEBOX_BELOW_DESC_CLASS);
-    stripMergeSpacingClasses(mergeBox);
+    styleUnit();
     positionMergeBoxStyles(descContainer, row, mergeBox);
     return true;
   }
@@ -1041,10 +1161,19 @@ function applyMergeBoxBelowDescription(enabled) {
     mergeBoxAnchors.set(mergeBox, anchor);
   }
 
-  descContainer.appendChild(row);
+  // Insert before the container's first timeline item — or before the
+  // already-placed comment box when it exists, so re-runs always settle
+  // as [hint][merge box][comment box][items]. Footer texts stay at the end.
+  const commentWrapper = [...container.children].find((child) =>
+    child.hasAttribute?.(COMMENT_BOX_MOVED_ATTR),
+  );
+  container.insertBefore(
+    row,
+    commentWrapper ?? findFirstTimelineItemChild(container) ?? null,
+  );
+
   mergeBox.setAttribute(MERGEBOX_MOVED_ATTR, "1");
-  mergeBox.classList.add(MERGEBOX_BELOW_DESC_CLASS);
-  stripMergeSpacingClasses(mergeBox);
+  styleUnit();
   positionMergeBoxStyles(descContainer, row, mergeBox);
   resetDomCache();
   return true;
@@ -1079,14 +1208,76 @@ function restoreCommentBox(wrapper) {
 }
 
 function restoreAllCommentBoxes() {
+  restoreCommentFooters();
   document
     .querySelectorAll(`[${COMMENT_BOX_MOVED_ATTR}="1"]`)
     .forEach((wrapper) => restoreCommentBox(wrapper));
   resetDomCache();
 }
 
-function applyCommentBoxAtTop(enabled) {
-  if (!enabled) {
+/**
+ * The comment box sits directly above the timeline items when the sort is
+ * newest-first (GitLab-style), i.e. right below the merge box:
+ * - Descending (newest first): [description][hint][merge box][comment
+ *   box][items newest→oldest][footer texts].
+ * - Ascending (oldest first): box at its native END-of-timeline position,
+ *   beside the newest items at the bottom.
+ *
+ * The guidelines/ProTip footer texts inside the box never travel with it:
+ * they are extracted and pinned to the end of the timeline.
+ */
+function findCommentFooters(wrapper) {
+  if (!wrapper) return [];
+  // Match by TEXT across all elements (the guidelines and ProTip carry no
+  // stable class between GitHub renders), dropping anything containing
+  // form controls BEFORE collapsing — so the comment form can never
+  // absorb or travel with the helper texts. When both texts share one
+  // form-free footer container, that single container is moved and native
+  // order (guidelines → ProTip) is preserved.
+  return findElementsByText(wrapper, COMMENT_FOOTER_PATTERN, "*", {
+    excludeContaining: COMMENT_FOOTER_GUARD_SELECTOR,
+  });
+}
+
+// Native page-end order: guidelines first, ProTip right after.
+const GUIDELINES_PATTERN = /Remember,\s+contributions/i;
+
+function extractCommentFooters(wrapper, container) {
+  let moved = false;
+  const footers = [...findCommentFooters(wrapper)].sort(
+    (a, b) =>
+      Number(Boolean(GUIDELINES_PATTERN.test(b.textContent ?? ""))) -
+      Number(Boolean(GUIDELINES_PATTERN.test(a.textContent ?? ""))),
+  );
+  for (const footer of footers) {
+    if (!commentFooterAnchors.has(footer)) {
+      const anchor = document.createComment("gqol-comment-footer-anchor");
+      footer.parentNode?.insertBefore(anchor, footer);
+      commentFooterAnchors.set(footer, anchor);
+    }
+    container.appendChild(footer);
+    footer.setAttribute(COMMENT_FOOTER_MOVED_ATTR, "1");
+    moved = true;
+  }
+  return moved;
+}
+
+function restoreCommentFooters() {
+  document
+    .querySelectorAll(`[${COMMENT_FOOTER_MOVED_ATTR}="1"]`)
+    .forEach((footer) => {
+      const anchor = commentFooterAnchors.get(footer);
+      if (anchor?.parentNode) {
+        anchor.parentNode.insertBefore(footer, anchor.nextSibling);
+        anchor.remove();
+      }
+      commentFooterAnchors.delete(footer);
+      footer.removeAttribute(COMMENT_FOOTER_MOVED_ATTR);
+    });
+}
+
+function applyCommentBoxPlacement(enabled, newestFirst) {
+  if (!enabled || !newestFirst) {
     restoreAllCommentBoxes();
     return false;
   }
@@ -1103,6 +1294,11 @@ function applyCommentBoxAtTop(enabled) {
   });
   if (!wrapper) return false;
 
+  // The guidelines/ProTip footer texts live INSIDE the comment box; when
+  // the box moves to the top they must be pulled out and pinned to the end
+  // of the timeline so they stay at the bottom of the page.
+  extractCommentFooters(wrapper, container);
+
   if (isCommentBoxPlaced(wrapper, container)) {
     wrapper.setAttribute(COMMENT_BOX_MOVED_ATTR, "1");
     wrapper.classList.add(COMMENT_BOX_AT_TOP_CLASS);
@@ -1115,14 +1311,13 @@ function applyCommentBoxAtTop(enabled) {
     commentBoxAnchors.set(wrapper, anchor);
   }
 
-  const firstItem = [...container.children].find((child) =>
-    child.matches(TIMELINE_ITEM_SELECTOR),
+  // Newest first: the box goes directly above the timeline items (the
+  // merge box feature runs first and holds the same anchor, so it settles
+  // between the hint and this box).
+  container.insertBefore(
+    wrapper,
+    findFirstTimelineItemChild(container) ?? null,
   );
-  if (firstItem) {
-    container.insertBefore(wrapper, firstItem);
-  } else {
-    container.prepend(wrapper);
-  }
 
   wrapper.setAttribute(COMMENT_BOX_MOVED_ATTR, "1");
   wrapper.classList.add(COMMENT_BOX_AT_TOP_CLASS);
@@ -1135,93 +1330,142 @@ function applyCommentBoxAtTop(enabled) {
 // ---------------------------------------------------------------------------
 
 async function getCachedSettings() {
-  if (cachedSettings) return cachedSettings;
-  try {
-    cachedSettings = await (async () => {
-      try {
-        const stored = await storageGetSafe("sync", STORAGE_KEY);
-        return stored && typeof stored === "object"
-          ? normalizeSettings(stored)
-          : { ...DEFAULT_SETTINGS };
-      } catch {
-        const stored = await storageGetSafe("local", STORAGE_KEY);
-        return stored && typeof stored === "object"
-          ? normalizeSettings(stored)
-          : { ...DEFAULT_SETTINGS };
-      }
-    })();
-  } catch (error) {
-    console.warn("GitHub QoL: could not read settings, using defaults.", error);
-    cachedSettings = { ...DEFAULT_SETTINGS };
+  if (!cachedSettings) {
+    try {
+      cachedSettings = await getSettings();
+    } catch (error) {
+      console.warn("GitHub QoL: could not read settings, using defaults.", error);
+      cachedSettings = { ...DEFAULT_SETTINGS };
+    }
   }
   return cachedSettings;
 }
 
-function storageGetSafe(area, key) {
-  return new Promise((resolve, reject) => {
-    chrome.storage[area].get(key, (items) => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-      } else {
-        resolve(items[key]);
-      }
-    });
+// ---------------------------------------------------------------------------
+// Feature registry
+//
+// One entry per feature: apply(settings) runs it, needsWork(settings)
+// reports whether it still has something to do, reset() tears every trace
+// of it down. applyAll / needsWork / onNavigation all iterate this list —
+// adding a feature means adding one object, not editing four call sites.
+// ---------------------------------------------------------------------------
+
+function needsWorkReverseTimeline(settings) {
+  if (!settings.reverseTimeline) return false;
+  const container = findTimelineContainer();
+  if (getTimelineItems().length >= 2) {
+    return Boolean(
+      container && container.getAttribute("data-gqol-reverse") !== "1",
+    );
+  }
+  return Boolean(container && timelineNeedsHydration(container));
+}
+
+function needsWorkCollapseDescription(settings) {
+  if (!settings.collapsePrDescription) return false;
+  const descEl = getDescriptionElement();
+  const body = getDescriptionBody();
+  if (!descEl && !body) return false;
+  if (!body) return Boolean(descEl && isDescriptionLoading(descEl));
+  if (isDescriptionBodyLoading(body)) return true;
+  // Cheap closest() before the reflow-forcing height measurement.
+  return !body.closest(`.${DESC_BLOCK_CLASS}`) && isTallBody(body);
+}
+
+function needsWorkMergeBox(settings) {
+  if (!settings.showMergeBoxBelowDescription) return false;
+  const mergeBox = findMergeBox();
+  return Boolean(mergeBox && !isMergeBoxPlaced(mergeBox));
+}
+
+function needsWorkCommentBox(settings) {
+  if (!settings.commentBoxAtTop) {
+    return Boolean(
+      document.querySelector(
+        `[${COMMENT_BOX_MOVED_ATTR}="1"], [${COMMENT_FOOTER_MOVED_ATTR}="1"]`,
+      ),
+    );
+  }
+  // Descending (newest first) puts the box at the top beside the newest
+  // items; ascending keeps it in its native end-of-timeline spot.
+  if (!settings.reverseTimeline) {
+    return Boolean(
+      document.querySelector(
+        `[${COMMENT_BOX_MOVED_ATTR}="1"], [${COMMENT_FOOTER_MOVED_ATTR}="1"]`,
+      ),
+    );
+  }
+  const form = findCommentForm();
+  const container = findTimelineContainer();
+  if (!form || !container) return false;
+  const wrapper = findCommentWrapper(form, {
+    stopSelector: COMMENT_WRAPPER_STOP_SELECTOR,
+    timelineContainer: container,
+    timelineItem: getTimelineItems()[0] ?? null,
+    mergeBox: findMergeBox(),
   });
+  return Boolean(
+    wrapper &&
+      (!isCommentBoxPlaced(wrapper, container) ||
+        findCommentFooters(wrapper).length > 0),
+  );
+}
+
+function resetCollapseDescription() {
+  undoCollapseDescription();
+  stopDescriptionObserver();
+}
+
+const FEATURES = [
+  {
+    name: "collapse-description",
+    apply: (settings) =>
+      applyCollapseDescription(settings.collapsePrDescription),
+    needsWork: needsWorkCollapseDescription,
+    reset: resetCollapseDescription,
+  },
+  {
+    name: "mergebox-below-description",
+    apply: (settings) =>
+      applyMergeBoxBelowDescription(settings.showMergeBoxBelowDescription),
+    needsWork: needsWorkMergeBox,
+    reset: restoreAllMergeBoxes,
+  },
+  {
+    name: "comment-box-placement",
+    apply: (settings) =>
+      applyCommentBoxPlacement(
+        settings.commentBoxAtTop,
+        settings.reverseTimeline,
+      ),
+    needsWork: needsWorkCommentBox,
+    reset: restoreAllCommentBoxes,
+  },
+  {
+    name: "reverse-timeline",
+    apply: (settings) => applyReverseTimeline(settings.reverseTimeline, settings),
+    needsWork: needsWorkReverseTimeline,
+    reset: undoReverseTimeline,
+  },
+];
+
+function resetAllFeatures() {
+  // Reverse first: it reorders the container the other features live in.
+  runFeature("reverse-timeline reset", undoReverseTimeline);
+  for (const feature of FEATURES) {
+    if (feature.name === "reverse-timeline") continue;
+    runFeature(`${feature.name} reset`, feature.reset);
+  }
 }
 
 function needsWork(settings) {
   if (!isPullRequestPage()) return false;
-
-  if (settings.reverseTimeline) {
-    const container = findTimelineContainer();
-    if (getTimelineItems().length >= 2) {
-      if (container && container.getAttribute("data-gqol-reverse") !== "1") {
-        return true;
-      }
-    } else if (container && timelineNeedsHydration(container)) {
-      return true;
-    }
-  }
-
-  if (settings.collapsePrDescription) {
-    const descEl = getDescriptionElement();
-    const body = getDescriptionBody();
-    if (!descEl && !body) return false;
-    if (!body) return Boolean(descEl && isDescriptionLoading(descEl));
-    if (isDescriptionBodyLoading(body)) return true;
-    // Cheap closest() before the reflow-forcing height measurement.
-    if (!body.closest(`.${DESC_BLOCK_CLASS}`) && isTallBody(body)) return true;
-  }
-
-  if (settings.showMergeBoxBelowDescription) {
-    const mergeBox = findMergeBox();
-    const descContainer = findDescriptionContainer();
-    if (mergeBox && descContainer && !isMergeBoxPlaced(mergeBox, descContainer)) {
-      return true;
-    }
-  }
-
-  if (settings.commentBoxAtTop) {
-    const form = findCommentForm();
-    const container = findTimelineContainer();
-    if (form && container) {
-      const wrapper = findCommentWrapper(form, {
-        stopSelector: COMMENT_WRAPPER_STOP_SELECTOR,
-        timelineContainer: container,
-        timelineItem: getTimelineItems()[0] ?? null,
-        mergeBox: findMergeBox(),
-      });
-      if (wrapper && !isCommentBoxPlaced(wrapper, container)) return true;
-    }
-  }
-
-  return false;
+  return FEATURES.some((feature) => feature.needsWork(settings));
 }
 
 function stopGlobalObserver() {
   globalMutationObserver?.disconnect();
   globalMutationObserver = null;
-  globalObserverStartedAt = 0;
   observerSettledAt = null;
 }
 
@@ -1235,13 +1479,11 @@ function ensureGlobalObserver() {
     .then((settings) => {
       if (needsWork(settings)) {
         if (!globalMutationObserver) {
-          globalObserverStartedAt = Date.now();
           globalMutationObserver = new MutationObserver(() => {
-            if (Date.now() - globalObserverStartedAt > 60000) {
-              stopGlobalObserver();
-            } else {
-              scheduleRevalidate();
-            }
+            // Rolling linger: stay alive while the page keeps mutating.
+            // applyAll's settled branch retires it after true DOM silence.
+            observerSettledAt = Date.now();
+            scheduleRevalidate();
           });
           globalMutationObserver.observe(document.documentElement, {
             childList: true,
@@ -1277,11 +1519,8 @@ async function applyAll() {
   isApplying = true;
   try {
     if (!isPullRequestPage()) {
-      runFeature("reverse-timeline reset", undoReverseTimeline);
-      runFeature("description reset", undoCollapseDescription);
-      stopDescriptionObserver();
-      runFeature("mergebox reset", restoreAllMergeBoxes);
-      runFeature("comment-box reset", restoreAllCommentBoxes);
+      resetAllFeatures();
+      removeSortRow();
       stopGlobalObserver();
       clearStatus();
       document.documentElement.removeAttribute("data-gqol-active");
@@ -1295,18 +1534,15 @@ async function applyAll() {
     nudgeDescription();
     updateStatus(settings);
 
-    const collapsed = await runFeature("collapse-description", () =>
-      applyCollapseDescription(settings.collapsePrDescription),
-    );
-    const mergeBoxDone = runFeature("mergebox-below-description", () =>
-      applyMergeBoxBelowDescription(settings.showMergeBoxBelowDescription),
-    );
-    const commentBoxDone = runFeature("comment-box-at-top", () =>
-      applyCommentBoxAtTop(settings.commentBoxAtTop),
-    );
-    const reversed = await runFeature("reverse-timeline", () =>
-      applyReverseTimeline(settings.reverseTimeline, settings),
-    );
+    let anyApplied = false;
+    for (const feature of FEATURES) {
+      const done = await runFeature(feature.name, () => feature.apply(settings));
+      anyApplied ||= Boolean(done);
+    }
+
+    // After the features settle (comment box in its final spot), anchor
+    // the sort row directly above the comment box.
+    runFeature("sort-row", () => ensureSortRow(settings));
 
     if (needsWork(settings)) {
       observerSettledAt = null;
@@ -1325,7 +1561,7 @@ async function applyAll() {
     }
     updateStatus(settings);
 
-    return reversed || collapsed || mergeBoxDone || commentBoxDone;
+    return anyApplied;
   } finally {
     isApplying = false;
   }
@@ -1353,18 +1589,13 @@ function scheduleInitialPasses() {
 }
 
 function onNavigation() {
-  const url = location.href;
-  if (url !== lastUrl) {
-    lastUrl = url;
-    lastDescriptionNudgeAt = 0;
-    resetDomCache();
-    undoReverseTimeline();
-    undoCollapseDescription();
-    stopDescriptionObserver();
-    restoreAllMergeBoxes();
-    restoreAllCommentBoxes();
-    stopGlobalObserver();
-  }
+  if (pageKey() === lastUrl) return;
+  lastUrl = pageKey();
+  lastDescriptionNudgeAt = 0;
+  resetDomCache();
+  resetAllFeatures();
+  removeSortRow();
+  stopGlobalObserver();
   scheduleInitialPasses();
   ensureGlobalObserver();
 }
@@ -1373,13 +1604,22 @@ function onNavigation() {
 // Init
 // ---------------------------------------------------------------------------
 
-lastUrl = location.href;
+lastUrl = pageKey();
 document.documentElement.setAttribute("data-gqol-loaded", "1");
 scheduleInitialPasses();
 ensureGlobalObserver();
 
+// GitHub's React PR pages navigate client-side without turbo/pjax events,
+// so listen to every signal we know about…
 document.addEventListener("turbo:load", onNavigation);
+document.addEventListener("turbo:render", onNavigation);
 document.addEventListener("pjax:end", onNavigation);
+document.addEventListener("soft-nav:end", onNavigation);
+window.addEventListener("popstate", onNavigation);
+// …and poll as a catch-all for router navigations that fire no event at all.
+setInterval(() => {
+  if (pageKey() !== lastUrl) onNavigation();
+}, 1000);
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if ((area !== "sync" && area !== "local") || !changes.githubQolSettings) return;

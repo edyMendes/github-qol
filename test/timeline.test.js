@@ -122,6 +122,29 @@ describe("restoreTimelineOrder", () => {
     expect(order(container)).toEqual(["new", "2", "1"]);
 
     restoreTimelineOrder(container, SELECTOR);
-    expect(order(container)).toEqual(["new", "1", "2"]);
+    // The unknown item keeps its current slot (after the block): the saved
+    // gid order is restored within the block itself.
+    expect(order(container)).toEqual(["1", "2", "new"]);
+  });
+
+  it("keeps non-item siblings (callouts, footer) in place when reversing", () => {
+    const container = buildTimeline(["1", "2"]);
+    const hint = document.createElement("div");
+    hint.className = "copilot-hint";
+    const footer = document.createElement("div");
+    footer.className="timeline-footer";
+    footer.textContent = "Remember, contributions to this repository should follow our GitHub Community Guidelines.";
+    container.prepend(hint);
+    container.appendChild(footer);
+
+    reverseTimelineContainer(container, SELECTOR);
+    expect(order(container)).toEqual(["2", "1"]);
+    expect(container.firstElementChild).toBe(hint);
+    expect(container.lastElementChild).toBe(footer);
+
+    restoreTimelineOrder(container, SELECTOR);
+    expect(order(container)).toEqual(["1", "2"]);
+    expect(container.firstElementChild).toBe(hint);
+    expect(container.lastElementChild).toBe(footer);
   });
 });

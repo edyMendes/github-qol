@@ -20,6 +20,21 @@ export function saveTimelineGids(container, selector) {
 }
 
 /**
+ * Rewrite the container's item children in `orderedItems` order WITHOUT
+ * moving them past non-item siblings: each item is inserted before the
+ * current first item slot, so children before the block (e.g. the PR
+ * description, callout hints) and after it (e.g. the footer/guidelines)
+ * keep their native positions — only the order inside the block flips.
+ */
+function placeItemsInOrder(container, orderedItems, selector) {
+  const first = getDirectTimelineItems(container, selector)[0];
+  if (!first) return;
+  for (const item of orderedItems) {
+    if (item !== first) container.insertBefore(item, first);
+  }
+}
+
+/**
  * Restore original order: prefer the saved gid sequence, fall back to
  * reversing again. Returns true if any reorder happened.
  */
@@ -33,16 +48,18 @@ export function restoreTimelineOrder(container, selector) {
     const byGid = new Map(
       items.map((item) => [item.getAttribute("data-gid") ?? "", item]),
     );
-    for (const gid of gids) {
-      const item = byGid.get(gid);
-      if (item && container.lastElementChild !== item) {
-        container.appendChild(item);
-        changed = true;
-      }
-    }
+    const ordered = gids
+      .map((gid) => byGid.get(gid))
+      .filter(Boolean);
+    const before = items.map((item) => item.getAttribute("data-gid") ?? "");
+    placeItemsInOrder(container, ordered, selector);
+    const after = getDirectTimelineItems(container, selector).map(
+      (item) => item.getAttribute("data-gid") ?? "",
+    );
+    changed = before.join("|") !== after.join("|");
   } else if (container.getAttribute("data-gqol-reverse") === "1") {
     if (items.length >= 2) {
-      [...items].reverse().forEach((item) => container.appendChild(item));
+      placeItemsInOrder(container, [...items].reverse(), selector);
       changed = true;
     }
   }
@@ -53,9 +70,10 @@ export function restoreTimelineOrder(container, selector) {
 }
 
 /**
- * Reverse the container's timeline items (newest first). Saves the original
- * gid order on first reversal so it can be restored exactly. Returns false
- * when there are fewer than 2 items (nothing to do).
+ * Reverse the container's timeline items (newest first) in place: the block
+ * of items keeps its position among non-item siblings, only the order
+ * within it flips. Saves the original gid order on first reversal so it can
+ * be restored exactly. Returns false when there are fewer than 2 items.
  */
 export function reverseTimelineContainer(container, selector) {
   const items = getDirectTimelineItems(container, selector);
@@ -65,7 +83,7 @@ export function reverseTimelineContainer(container, selector) {
     saveTimelineGids(container, selector);
   }
 
-  [...items].reverse().forEach((item) => container.appendChild(item));
+  placeItemsInOrder(container, [...items].reverse(), selector);
   container.setAttribute("data-gqol-reverse", "1");
   return true;
 }

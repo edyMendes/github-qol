@@ -307,3 +307,74 @@ html[data-gqol-active] .gqol-comment-box-at-top.timeline-comment-wrapper,
 html[data-gqol-active] .gqol-comment-box-at-top .timeline-comment-wrapper {
   margin-bottom: var(--base-size-16, 16px);
 }
+
+/* Sort direction toggle — GitLab-style row above the timeline items */
+html[data-gqol-active] .gqol-sort-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: var(--base-size-4, 4px) 0 var(--base-size-8, 8px);
+}
+
+.gqol-sort-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--borderColor-default, var(--color-border-default, #d0d7de));
+  border-radius: var(--borderRadius-medium, 6px);
+  background-color: var(--bgColor-default, var(--color-canvas-default, #ffffff));
+  color: var(--fgColor-muted, var(--color-fg-muted, #656d76));
+  cursor: pointer;
+  box-shadow: none;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+[data-color-mode="dark"] .gqol-sort-button,
+.dark .gqol-sort-button,
+html.dark .gqol-sort-button {
+  border-color: var(--borderColor-default, var(--color-border-default, #30363d));
+  background-color: var(--bgColor-default, var(--color-canvas-default, #0d1117));
+  color: var(--fgColor-muted, var(--color-fg-muted, #8b949e));
+}
+
+.gqol-sort-button:hover {
+  border-color: var(--borderColor-accent-emphasis, var(--color-accent-emphasis, #0969da));
+  color: var(--fgColor-accent, var(--color-accent-fg, #0969da));
+  background-color: var(
+    --button-default-bgColor-hover,
+    var(--color-btn-hover-bg, rgba(208, 215, 222, 0.32))
+  );
+}
+
+[data-color-mode="dark"] .gqol-sort-button:hover,
+.dark .gqol-sort-button:hover,
+html.dark .gqol-sort-button:hover {
+  border-color: var(--borderColor-accent-emphasis, var(--color-accent-emphasis, #1f6feb));
+  color: var(--fgColor-accent, var(--color-accent-fg, #4493f8));
+}
+
+.gqol-sort-button:focus-visible {
+  outline: 2px solid var(--focus-outlineColor, var(--color-accent-fg, #0969da));
+  outline-offset: 2px;
+}
+
+.gqol-sort-button[aria-pressed="true"] {
+  color: var(--fgColor-accent, var(--color-accent-fg, #0969da));
+  border-color: var(--borderColor-accent-emphasis, var(--color-accent-emphasis, #0969da));
+}
+
+[data-color-mode="dark"] .gqol-sort-button[aria-pressed="true"],
+.dark .gqol-sort-button[aria-pressed="true"],
+html.dark .gqol-sort-button[aria-pressed="true"] {
+  color: var(--fgColor-accent, var(--color-accent-fg, #4493f8));
+  border-color: var(--borderColor-accent-emphasis, var(--color-accent-emphasis, #1f6feb));
+}
+
+.gqol-sort-button__icon {
+  display: block;
+  flex-shrink: 0;
+  fill: currentColor;
+}

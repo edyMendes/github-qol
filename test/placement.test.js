@@ -2,8 +2,9 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   findTimelineItemFor,
   findCommentWrapper,
+  findMergeBoxUnit,
+  findElementsByText,
   isPlacedBeforeTimelineItems,
-  isLastChildOf,
 } from "../src/js/lib/placement.js";
 
 const ITEM_SELECTOR = ".js-timeline-item";
@@ -161,28 +162,140 @@ describe("isPlacedBeforeTimelineItems", () => {
   });
 });
 
-describe("isLastChildOf", () => {
-  it("is true for the last child", () => {
-    const parent = el("div");
-    const row = el("div");
-    parent.appendChild(el("div"));
-    parent.appendChild(row);
-    expect(isLastChildOf(row, parent)).toBe(true);
+describe("findMergeBoxUnit", () => {
+  function mergeBox() {
+    const box = el("div");
+    box.setAttribute("data-testid", "mergebox-partial");
+    return box;
+  }
+
+  it("climbs from the partial to its top-level wrapper (React Stack)", () => {
+    const container = el("div");
+    const stack = el("div", "tmp-py-2 tmp-px-3 border bgColor-muted rounded-2 mt-2 Stack");
+    const inner = el("div", "inner");
+    const box = mergeBox();
+    inner.appendChild(box);
+    stack.appendChild(inner);
+    container.appendChild(stack);
+    container.appendChild(el("div", "js-timeline-item"));
+    document.body.appendChild(container);
+
+    expect(findMergeBoxUnit(box, container, ITEM_SELECTOR)).toBe(stack);
   });
 
-  it("is false for a non-last child", () => {
-    const parent = el("div");
-    const row = el("div");
-    parent.appendChild(row);
-    parent.appendChild(el("div"));
-    expect(isLastChildOf(row, parent)).toBe(false);
+  it("stops at the timeline item that wraps the merge box", () => {
+    const container = el("div");
+    const item = el("div", "js-timeline-item");
+    const box = mergeBox();
+    item.appendChild(box);
+    container.appendChild(item);
+    container.appendChild(el("div", "js-timeline-item"));
+    document.body.appendChild(container);
+
+    expect(findMergeBoxUnit(box, container, ITEM_SELECTOR)).toBe(item);
   });
 
-  it("is false when the row has a different parent", () => {
-    const parent = el("div");
-    const other = el("div");
-    const row = el("div");
-    other.appendChild(row);
-    expect(isLastChildOf(row, parent)).toBe(false);
+  it("returns the partial itself when it is a direct child of the container", () => {
+    const container = el("div");
+    const box = mergeBox();
+    container.appendChild(box);
+    container.appendChild(el("div", "js-timeline-item"));
+    document.body.appendChild(container);
+
+    expect(findMergeBoxUnit(box, container, ITEM_SELECTOR)).toBe(box);
+  });
+
+  it("climbs wrappers even without sibling timeline items until the container", () => {
+    const container = el("div");
+    const wrapper = el("div", "wrapper");
+    const box = mergeBox();
+    wrapper.appendChild(box);
+    container.appendChild(wrapper);
+    document.body.appendChild(container);
+
+    expect(findMergeBoxUnit(box, container, ITEM_SELECTOR)).toBe(wrapper);
+  });
+
+  it("returns null for a disconnected box or missing container", () => {
+    const box = mergeBox();
+    expect(findMergeBoxUnit(box, document.body, ITEM_SELECTOR)).toBe(null);
+    document.body.appendChild(box);
+    expect(findMergeBoxUnit(box, null, ITEM_SELECTOR)).toBe(null);
+  });
+});
+
+describe("findElementsByText", () => {
+  const PATTERN = /Remember,\s+contributions|ProTip!.*\.patch/i;
+
+  function footer(text, className = "text-small color-fg-muted d-flex") {
+    const node = el("div", className);
+    node.textContent = text;
+    return node;
+  }
+
+  it("finds sibling footer texts (guidelines + protip)", () => {
+    const root = el("div");
+    root.appendChild(footer("Remember, contributions to this repository should follow our GitHub Community Guidelines."));
+    root.appendChild(footer("ProTip! Add .patch or .diff to the end of URLs for Git’s plaintext views."));
+    document.body.appendChild(root);
+
+    expect(findElementsByText(root, PATTERN, ".text-small")).toHaveLength(2);
+  });
+
+  it("collapses nested matches to the outermost element", () => {
+    const root = el("div");
+    const outer = footer("");
+    const inner = el("span", "text-small");
+    inner.textContent = "Remember, contributions to this repository";
+    outer.appendChild(inner);
+    root.appendChild(outer);
+    document.body.appendChild(root);
+
+    const found = findElementsByText(root, PATTERN, ".text-small");
+    expect(found).toHaveLength(1);
+    expect(found[0]).toBe(outer);
+  });
+
+  it("ignores elements whose text does not match", () => {
+    const root = el("div");
+    root.appendChild(footer("Some other helper text"));
+    document.body.appendChild(root);
+
+    expect(findElementsByText(root, PATTERN, ".text-small")).toEqual([]);
+  });
+
+  it("returns empty for a missing root", () => {
+    expect(findElementsByText(null, PATTERN, ".text-small")).toEqual([]);
+  });
+
+  it("excludeContaining drops guard matches before collapsing", () => {
+    const root = el("div");
+    const form = el("form");
+    const textarea = el("textarea");
+    const protip = el("p");
+    protip.textContent = "ProTip! Add .patch links.";
+    form.append(textarea, protip);
+    root.appendChild(form);
+    document.body.appendChild(root);
+
+    // Without the guard the form absorbs the ProTip match; with it, the
+    // form is dropped and the inner text element is returned.
+    expect(findElementsByText(root, PATTERN, "*", { excludeContaining: "form, textarea" })).toEqual([protip]);
+  });
+
+  it("excludeContaining keeps a shared form-free footer container", () => {
+    const root = el("div");
+    const form = el("form");
+    form.appendChild(el("textarea"));
+    const footer = el("div", "footer");
+    const a = el("p");
+    a.textContent = "Remember, contributions to this repository";
+    const b = el("p");
+    b.textContent = "ProTip! Be kind.";
+    footer.append(a, b);
+    root.append(form, footer);
+    document.body.appendChild(root);
+
+    expect(findElementsByText(root, PATTERN, "*", { excludeContaining: "form, textarea" })).toEqual([footer]);
   });
 });

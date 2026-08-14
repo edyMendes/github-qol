@@ -18,19 +18,12 @@
       <fieldset class="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-3">
         <legend class="sr-only">Features</legend>
 
-        <label class="flex cursor-pointer gap-3">
-          <input
-            id="setting-reverse-timeline"
-            type="checkbox"
-            class="mt-0.5 size-4 shrink-0 rounded border-zinc-600 bg-zinc-950 text-blue-500 focus:ring-2 focus:ring-blue-500/30"
-          />
-          <span class="min-w-0 space-y-0.5">
-            <span class="block text-sm font-medium text-zinc-200">Reverse PR timeline</span>
-            <span class="block text-xs leading-snug text-zinc-500">
-              Comments, reviews, actions, and deployments show newest first.
-            </span>
+        <div class="space-y-0.5">
+          <span class="block text-sm font-medium text-zinc-200">Reverse PR timeline</span>
+          <span class="block text-xs leading-snug text-zinc-500">
+            Use the sort button (⌄/⌃) above the timeline on any PR page to switch between newest first and oldest first.
           </span>
-        </label>
+        </div>
 
         <label class="flex cursor-pointer gap-3">
           <input
@@ -67,9 +60,9 @@
             class="mt-0.5 size-4 shrink-0 rounded border-zinc-600 bg-zinc-950 text-blue-500 focus:ring-2 focus:ring-blue-500/30"
           />
           <span class="min-w-0 space-y-0.5">
-            <span class="block text-sm font-medium text-zinc-200">Comment box at top</span>
+            <span class="block text-sm font-medium text-zinc-200">Comment box follows sort</span>
             <span class="block text-xs leading-snug text-zinc-500">
-              Move the new-comment box above the timeline so you can comment without scrolling down.
+              Newest first: box right above the timeline items. Oldest first: box at the end of the timeline.
             </span>
           </span>
         </label>
