@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@layer base {
+  html.dark {
+    scrollbar-color: var(--color-zinc-600) var(--color-zinc-800);
+  }
+
+  html.dark *::-webkit-scrollbar {
+    width: 0.5rem;
+    height: 0.5rem;
+  }
+
+  html.dark *::-webkit-scrollbar-track {
+    background-color: var(--color-zinc-800);
+  }
+
+  html.dark *::-webkit-scrollbar-thumb {
+    border-radius: 0.25rem;
+    background-color: var(--color-zinc-600);
+  }
+}
+
+@layer utilities {
+  @keyframes deep-link-flash-keyframes {
+    0%,
+    100% {
+      box-shadow: none;
+    }
+
+    50% {
+      border-color: var(--color-blue-400);
+      box-shadow:
+        0 0 0 2px color-mix(in oklab, var(--color-blue-500) 55%, transparent),
+        0 0 14px color-mix(in oklab, var(--color-blue-500) 45%, transparent);
+    }
+  }
+
+  .deep-link-flash {
+    animation: deep-link-flash-keyframes 1.25s ease-in-out 2;
+  }
+}

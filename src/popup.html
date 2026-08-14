@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GitHub QoL</title>
+    <link rel="stylesheet" href="css/outputTailwind.css" />
+  </head>
+  <body class="w-[340px] min-w-[340px] bg-zinc-950 font-sans text-zinc-100 antialiased">
+    <div class="flex flex-col gap-4 p-4">
+      <header class="space-y-1">
+        <h1 class="text-base font-semibold text-zinc-50">GitHub QoL</h1>
+        <p class="text-xs leading-relaxed text-zinc-500">
+          Quality-of-life tweaks for GitHub pull requests.
+        </p>
+      </header>
+
+      <fieldset class="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-3">
+        <legend class="sr-only">Features</legend>
+
+        <label class="flex cursor-pointer gap-3">
+          <input
+            id="setting-reverse-timeline"
+            type="checkbox"
+            class="mt-0.5 size-4 shrink-0 rounded border-zinc-600 bg-zinc-950 text-blue-500 focus:ring-2 focus:ring-blue-500/30"
+          />
+          <span class="min-w-0 space-y-0.5">
+            <span class="block text-sm font-medium text-zinc-200">Reverse PR timeline</span>
+            <span class="block text-xs leading-snug text-zinc-500">
+              Comments, reviews, actions, and deployments show newest first.
+            </span>
+          </span>
+        </label>
+
+        <label class="flex cursor-pointer gap-3">
+          <input
+            id="setting-collapse-description"
+            type="checkbox"
+            class="mt-0.5 size-4 shrink-0 rounded border-zinc-600 bg-zinc-950 text-blue-500 focus:ring-2 focus:ring-blue-500/30"
+          />
+          <span class="min-w-0 space-y-0.5">
+            <span class="block text-sm font-medium text-zinc-200">Collapse PR description</span>
+            <span class="block text-xs leading-snug text-zinc-500">
+              Show a short preview; click to expand the full description.
+            </span>
+          </span>
+        </label>
+
+        <label class="flex cursor-pointer gap-3">
+          <input
+            id="setting-mergebox-below-description"
+            type="checkbox"
+            class="mt-0.5 size-4 shrink-0 rounded border-zinc-600 bg-zinc-950 text-blue-500 focus:ring-2 focus:ring-blue-500/30"
+          />
+          <span class="min-w-0 space-y-0.5">
+            <span class="block text-sm font-medium text-zinc-200">Merge status below description</span>
+            <span class="block text-xs leading-snug text-zinc-500">
+              Show reviews, checks, and merge conflicts under the PR description.
+            </span>
+          </span>
+        </label>
+
+        <label class="flex cursor-pointer gap-3">
+          <input
+            id="setting-comment-box-at-top"
+            type="checkbox"
+            class="mt-0.5 size-4 shrink-0 rounded border-zinc-600 bg-zinc-950 text-blue-500 focus:ring-2 focus:ring-blue-500/30"
+          />
+          <span class="min-w-0 space-y-0.5">
+            <span class="block text-sm font-medium text-zinc-200">Comment box at top</span>
+            <span class="block text-xs leading-snug text-zinc-500">
+              Move the new-comment box above the timeline so you can comment without scrolling down.
+            </span>
+          </span>
+        </label>
+      </fieldset>
+
+      <p id="popup-status" class="min-h-[1rem] text-center text-[10px] text-zinc-600" aria-live="polite"></p>
+    </div>
+
+    <script type="module" src="js/popup.min.js"></script>
+  </body>
+</html>

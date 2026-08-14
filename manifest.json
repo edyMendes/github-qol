@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "GitHub QoL",
+  "description": "Quality-of-life tweaks for GitHub pull requests.",
+  "version": "0.2.0",
+  "icons": {
+    "16": "public/assets/logo/16.png",
+    "32": "public/assets/logo/32.png",
+    "48": "public/assets/logo/48.png",
+    "128": "public/assets/logo/128.png"
+  },
+  "permissions": ["storage"],
+  "host_permissions": ["https://github.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://github.com/*/*/pull/*", "https://github.com/*/*/pull/*/*"],
+      "js": ["src/js/content-github-pr.bundle.min.js"],
+      "css": ["src/css/github-pr.css"],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "GitHub QoL",
+    "default_icon": {
+      "16": "public/assets/logo/16.png",
+      "32": "public/assets/logo/32.png"
+    }
+  },
+  "background": {
+    "service_worker": "src/js/background.min.js",
+    "type": "module"
+  }
+}
