@@ -3,6 +3,7 @@ import {
   createSortButton,
   createSortRow,
   getSortButton,
+  isSortRowPlaced,
   placeSortRow,
   setSortDirection,
   SORT_BUTTON_ID,
@@ -114,6 +115,47 @@ describe("placeSortRow", () => {
     const row = createSortRow();
     expect(placeSortRow(null, document.body)).toBe(false);
     expect(placeSortRow(row, null)).toBe(false);
+  });
+});
+
+describe("isSortRowPlaced", () => {
+  function buildAnchored() {
+    const container = el("div");
+    const wrapper = el("div", "comment-wrapper");
+    container.appendChild(wrapper);
+    container.appendChild(el("div", "js-timeline-item"));
+    document.body.appendChild(container);
+
+    const row = createSortRow();
+    placeSortRow(row, container, wrapper);
+    return { container, wrapper, row };
+  }
+
+  it("is true exactly when placeSortRow would be a no-op", () => {
+    const { container, wrapper, row } = buildAnchored();
+    expect(isSortRowPlaced(row, container, wrapper)).toBe(true);
+    expect(placeSortRow(row, container, wrapper)).toBe(false);
+  });
+
+  it("is false when the row is displaced", () => {
+    const { container, wrapper, row } = buildAnchored();
+    container.appendChild(row);
+    expect(isSortRowPlaced(row, container, wrapper)).toBe(false);
+  });
+
+  it("is true when the row itself is the insertion target", () => {
+    const container = el("div");
+    container.appendChild(createSortRow());
+    document.body.appendChild(container);
+
+    const row = container.firstElementChild;
+    expect(isSortRowPlaced(row, container, null)).toBe(true);
+  });
+
+  it("is false for missing row or container", () => {
+    const { container, row } = buildAnchored();
+    expect(isSortRowPlaced(null, container, null)).toBe(false);
+    expect(isSortRowPlaced(row, null, null)).toBe(false);
   });
 });
 

@@ -94,7 +94,7 @@ function hydrateTimeline(container, onProgress) {
   });
 }
 
-export function undoReverseTimeline() {
+function undoReverseTimeline() {
   if (timelineMutationObserver) {
     timelineMutationObserver.disconnect();
     timelineMutationObserver = null;
@@ -117,7 +117,7 @@ export function undoReverseTimeline() {
   resetDomCache();
 }
 
-export async function applyReverseTimeline(enabled, settings) {
+async function applyReverseTimeline(enabled, settings) {
   if (!enabled) {
     undoReverseTimeline();
     clearStatus();
@@ -162,7 +162,7 @@ export async function applyReverseTimeline(enabled, settings) {
   }
 }
 
-export function needsWorkReverseTimeline(settings) {
+function needsWorkReverseTimeline(settings) {
   if (!settings.reverseTimeline) return false;
   const container = findTimelineContainer();
   if (getTimelineItems().length >= 2) {

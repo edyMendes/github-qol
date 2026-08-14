@@ -51,7 +51,7 @@ function getDomCache() {
   return domCache;
 }
 
-export function getDiscussionRoot() {
+function getDiscussionRoot() {
   return getDomCache().discussionRoot;
 }
 

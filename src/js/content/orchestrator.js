@@ -14,11 +14,11 @@ import { isPullRequestPage, pageKey } from "./page.js";
 import { nudgeDescription, resetNudgeTimer } from "./hydration.js";
 import { clearStatus, updateStatus } from "./status.js";
 import { registerBus } from "./bus.js";
-import { ensureSortRow, removeSortRow } from "./features/sort-row.js";
 import collapseDescription from "./features/collapse-description.js";
 import mergeboxBelowDescription from "./features/mergebox.js";
 import commentBoxPlacement from "./features/comment-box.js";
 import reverseTimeline from "./features/reverse-timeline.js";
+import sortRow from "./features/sort-row.js";
 
 const INITIAL_RETRY_DELAYS = [0, 800, 2000, 5000, 10000, 20000, 45000];
 const OBSERVER_SETTLE_LINGER_MS = 60000;
@@ -26,12 +26,14 @@ const REVALIDATE_DEBOUNCE_MS = 600;
 
 // Apply order matters: collapse first (reads the description in place),
 // then the moves, then the reversal (reorders the container the others
-// live in).
+// live in), and finally the sort row (anchored above the comment box once
+// it has settled in its final spot).
 const FEATURES = [
   collapseDescription,
   mergeboxBelowDescription,
   commentBoxPlacement,
   reverseTimeline,
+  sortRow,
 ];
 
 let globalMutationObserver = null;
@@ -60,7 +62,8 @@ function needsWork(settings) {
 
 function resetAllFeatures() {
   // Reverse order: the reversal is undone first because it reorders the
-  // container the other features live in.
+  // container the other features live in; the sort row is independent but
+  // comes off first for the same reason.
   for (const feature of [...FEATURES].reverse()) {
     runFeature(`${feature.name} reset`, feature.reset);
   }
@@ -111,7 +114,6 @@ async function applyAll() {
   try {
     if (!isPullRequestPage()) {
       resetAllFeatures();
-      removeSortRow();
       stopGlobalObserver();
       clearStatus();
       document.documentElement.removeAttribute("data-gqol-active");
@@ -130,10 +132,6 @@ async function applyAll() {
       const done = await runFeature(feature.name, () => feature.apply(settings));
       anyApplied ||= Boolean(done);
     }
-
-    // After the features settle (comment box in its final spot), anchor
-    // the sort row directly above the comment box.
-    runFeature("sort-row", () => ensureSortRow(settings));
 
     if (needsWork(settings)) {
       observerSettledAt = null;
@@ -185,7 +183,6 @@ export function onNavigation() {
   resetNudgeTimer();
   resetDomCache();
   resetAllFeatures();
-  removeSortRow();
   stopGlobalObserver();
   scheduleInitialPasses();
   ensureGlobalObserver();

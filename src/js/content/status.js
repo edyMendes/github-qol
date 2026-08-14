@@ -50,19 +50,23 @@ function getStatusDescriptor(settings) {
     };
   }
 
-  return items.length < 2
-    ? {
-        label: "Waiting for timeline…",
-        progress: items.length === 0 ? 14 : 26,
-        indeterminate: true,
-      }
-    : container && timelineNeedsHydration(container)
-      ? {
-          label: "Loading deferred timeline items…",
-          progress: 38,
-          indeterminate: true,
-        }
-      : { label: "Preparing timeline…", progress: 84, indeterminate: false };
+  if (items.length < 2) {
+    return {
+      label: "Waiting for timeline…",
+      progress: items.length === 0 ? 14 : 26,
+      indeterminate: true,
+    };
+  }
+
+  if (container && timelineNeedsHydration(container)) {
+    return {
+      label: "Loading deferred timeline items…",
+      progress: 38,
+      indeterminate: true,
+    };
+  }
+
+  return { label: "Preparing timeline…", progress: 84, indeterminate: false };
 }
 
 export function clearStatus() {

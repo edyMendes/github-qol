@@ -167,7 +167,7 @@ function unwrapCollapsedContainer(container, fallbackToFirstChild) {
   }
 }
 
-export function undoCollapseDescription() {
+function undoCollapseDescription() {
   document.querySelectorAll(`.${DESC_BLOCK_CLASS}`).forEach((block) => {
     unwrapCollapsedContainer(block, false);
   });
@@ -199,7 +199,7 @@ function ensureDescriptionObserver(descEl) {
   descriptionObservedEl = descEl;
 }
 
-export function applyCollapseDescription(enabled) {
+function applyCollapseDescription(enabled) {
   if (!enabled) {
     undoCollapseDescription();
     stopDescriptionObserver();
@@ -228,7 +228,7 @@ export function applyCollapseDescription(enabled) {
   return false;
 }
 
-export function needsWorkCollapseDescription(settings) {
+function needsWorkCollapseDescription(settings) {
   if (!settings.collapsePrDescription) return false;
   const descEl = getDescriptionElement();
   const body = getDescriptionBody();
@@ -239,7 +239,7 @@ export function needsWorkCollapseDescription(settings) {
   return !body.closest(`.${DESC_BLOCK_CLASS}`) && isTallBody(body);
 }
 
-export function resetCollapseDescription() {
+function resetCollapseDescription() {
   undoCollapseDescription();
   stopDescriptionObserver();
 }

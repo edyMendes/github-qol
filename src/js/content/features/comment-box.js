@@ -107,7 +107,7 @@ function restoreCommentFooters() {
     });
 }
 
-export function restoreAllCommentBoxes() {
+function restoreAllCommentBoxes() {
   restoreCommentFooters();
   document
     .querySelectorAll(`[${COMMENT_BOX_MOVED_ATTR}="1"]`)
@@ -115,7 +115,7 @@ export function restoreAllCommentBoxes() {
   resetDomCache();
 }
 
-export function applyCommentBoxPlacement(enabled, newestFirst) {
+function applyCommentBoxPlacement(enabled, newestFirst) {
   if (!enabled || !newestFirst) {
     restoreAllCommentBoxes();
     return false;
@@ -164,7 +164,7 @@ export function applyCommentBoxPlacement(enabled, newestFirst) {
   return true;
 }
 
-export function needsWorkCommentBox(settings) {
+function needsWorkCommentBox(settings) {
   if (!settings.commentBoxAtTop || !settings.reverseTimeline) {
     return Boolean(document.querySelector(MOVED_MARKERS_SELECTOR));
   }

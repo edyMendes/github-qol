@@ -7,6 +7,7 @@ import {
   createSortButton,
   createSortRow,
   getSortButton,
+  isSortRowPlaced,
   placeSortRow,
   setSortDirection,
   SORT_ROW_CLASS,
@@ -51,7 +52,7 @@ function findSortRowAnchor(container) {
   return itemIdx === -1 || boxIdx < itemIdx ? box : firstItem ?? null;
 }
 
-export function ensureSortRow(settings) {
+function ensureSortRow(settings) {
   const container = findTimelineContainer();
   if (!container) return false;
 
@@ -70,6 +71,21 @@ export function ensureSortRow(settings) {
   return true;
 }
 
-export function removeSortRow() {
+function needsWorkSortRow() {
+  const container = findTimelineContainer();
+  if (!container) return false;
+  const row = getSortButton()?.closest(`.${SORT_ROW_CLASS}`);
+  if (!row) return true;
+  return !isSortRowPlaced(row, container, findSortRowAnchor(container));
+}
+
+function removeSortRow() {
   document.querySelectorAll(`.${SORT_ROW_CLASS}`).forEach((row) => row.remove());
 }
+
+export default {
+  name: "sort-row",
+  apply: ensureSortRow,
+  needsWork: needsWorkSortRow,
+  reset: removeSortRow,
+};

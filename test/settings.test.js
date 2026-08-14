@@ -77,6 +77,17 @@ describe("getSettings", () => {
     });
   });
 
+  it("falls back to local data when sync is readable but empty", async () => {
+    // Sync was unavailable when defaults were seeded to local.
+    chrome.storage.local.__store.set(STORAGE_KEY, {
+      reverseTimeline: false,
+    });
+    expect(await getSettings()).toEqual({
+      ...DEFAULT_SETTINGS,
+      reverseTimeline: false,
+    });
+  });
+
   it("ignores non-object stored values", async () => {
     chrome.storage.sync.__store.set(STORAGE_KEY, "garbage");
     expect(await getSettings()).toEqual(DEFAULT_SETTINGS);

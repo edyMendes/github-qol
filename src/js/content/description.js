@@ -49,7 +49,7 @@ export function isDescriptionBodyLoading(body) {
   return Boolean(descRoot && isDescriptionLoading(descRoot));
 }
 
-export function measureFullHeight(el) {
+function measureFullHeight(el) {
   if (!el?.isConnected) return 0;
   const saved = {
     maxHeight: el.style.maxHeight,

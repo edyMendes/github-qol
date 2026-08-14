@@ -113,7 +113,15 @@ export function findElementsByText(root, pattern, selector, options = {}) {
   if (excludeContaining) {
     matches = matches.filter((el) => !el.querySelector(excludeContaining));
   }
-  return matches.filter(
-    (el) => !matches.some((other) => other !== el && other.contains(el)),
-  );
+
+  // Collapse to the outermost matches: an element is kept unless one of
+  // its ancestors also matched (equivalent to, but cheaper than, testing
+  // every other match with contains()).
+  const matchSet = new Set(matches);
+  return matches.filter((el) => {
+    for (let parent = el.parentElement; parent; parent = parent.parentElement) {
+      if (matchSet.has(parent)) return false;
+    }
+    return true;
+  });
 }

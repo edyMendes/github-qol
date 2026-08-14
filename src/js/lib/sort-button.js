@@ -75,6 +75,18 @@ export function createSortRow(button) {
 }
 
 /**
+ * True when the row already sits where placeSortRow would put it (directly
+ * above `anchor`, or at the top of `container` when no anchor exists).
+ */
+export function isSortRowPlaced(row, container, anchor) {
+  if (!row || !container) return false;
+  const target = anchor ?? container.firstChild;
+  if (target === row) return true;
+  return row.parentElement === (anchor?.parentElement ?? container) &&
+    row.nextSibling === target;
+}
+
+/**
  * Keep the sort row directly above `anchor` (e.g. the comment box
  * wrapper), wherever that element lives. Falls back to the top of the
  * timeline container when no anchor exists. Returns true when the row was
@@ -82,10 +94,10 @@ export function createSortRow(button) {
  */
 export function placeSortRow(row, container, anchor) {
   if (!row || !container) return false;
-  const parent = anchor?.parentElement ?? container;
-  const target = anchor ?? container.firstChild;
-  if (target === row) return false;
-  if (row.parentElement === parent && row.nextSibling === target) return false;
-  parent.insertBefore(row, target);
+  if (isSortRowPlaced(row, container, anchor)) return false;
+  (anchor?.parentElement ?? container).insertBefore(
+    row,
+    anchor ?? container.firstChild,
+  );
   return true;
 }

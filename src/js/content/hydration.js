@@ -28,7 +28,7 @@ function refetchIncludeFragments(root, selector = "include-fragment[src]") {
   });
 }
 
-export function forceLazyHydration(root) {
+function forceLazyHydration(root) {
   const descEl = getDescriptionElement();
   const descBody = descEl?.querySelector(".markdown-body, .js-comment-body");
   const preserveDescription =
@@ -89,9 +89,13 @@ export function timelineNeedsHydration(container) {
   );
   if (deferred.length === 0) return false;
 
+  // Deferred content inside the description block is expected; anywhere
+  // else in the timeline means items still need to be fetched.
   const descEl = getDescriptionElement();
-  return !(descEl && getTimelineItems().length >= 2) ||
-    ![...deferred].every((el) => descEl.contains(el));
+  const descriptionReady = Boolean(descEl && getTimelineItems().length >= 2);
+  return (
+    !descriptionReady || ![...deferred].every((el) => descEl.contains(el))
+  );
 }
 
 export function resetNudgeTimer() {

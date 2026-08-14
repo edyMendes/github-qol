@@ -164,7 +164,7 @@ function restoreMergeBox(mergeBox) {
   row?.style.removeProperty("--gqol-merge-status-bottom-y");
 }
 
-export function restoreAllMergeBoxes() {
+function restoreAllMergeBoxes() {
   document.querySelectorAll(`[${MERGEBOX_MOVED_ATTR}="1"]`).forEach((mergeBox) => {
     restoreMergeBox(mergeBox);
   });
@@ -178,7 +178,7 @@ export function restoreAllMergeBoxes() {
   resetDomCache();
 }
 
-export function applyMergeBoxBelowDescription(enabled) {
+function applyMergeBoxBelowDescription(enabled) {
   if (!enabled) {
     restoreAllMergeBoxes();
     return false;
@@ -241,7 +241,7 @@ export function applyMergeBoxBelowDescription(enabled) {
   return true;
 }
 
-export function needsWorkMergeBox(settings) {
+function needsWorkMergeBox(settings) {
   if (!settings.showMergeBoxBelowDescription) return false;
   const mergeBox = findMergeBox();
   return Boolean(mergeBox && !isMergeBoxPlaced(mergeBox));

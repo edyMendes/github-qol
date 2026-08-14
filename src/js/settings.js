@@ -16,12 +16,13 @@ export function normalizeSettings(raw = {}) {
   return normalized;
 }
 
+/** Read and normalize the stored settings; null when nothing usable. */
 function readStoredSettings(area) {
   return chrome.storage[area].get(STORAGE_KEY).then((items) => {
     const stored = items[STORAGE_KEY];
     return stored && typeof stored === "object"
       ? normalizeSettings(stored)
-      : { ...DEFAULT_SETTINGS };
+      : null;
   });
 }
 
@@ -29,32 +30,44 @@ function writeSettings(area, settings) {
   return chrome.storage[area].set({ [STORAGE_KEY]: settings });
 }
 
-export function getSettings() {
-  return readStoredSettings("sync").catch(() => readStoredSettings("local"));
+/** Sync first, local as fallback (sync can be unavailable/disabled). */
+export async function getSettings() {
+  for (const area of ["sync", "local"]) {
+    try {
+      const settings = await readStoredSettings(area);
+      if (settings) return settings;
+    } catch {
+      // Area unavailable — try the next.
+    }
+  }
+  return { ...DEFAULT_SETTINGS };
+}
+
+/** Write to `area`, falling back to the other one on failure. */
+async function writeWithFallback(preferred, settings) {
+  const fallback = preferred === "sync" ? "local" : "sync";
+  try {
+    await writeSettings(preferred, settings);
+  } catch {
+    await writeSettings(fallback, settings);
+  }
 }
 
 export async function saveSettings(partial) {
   const next = normalizeSettings({ ...(await getSettings()), ...partial });
-  try {
-    await writeSettings("sync", next);
-  } catch {
-    await writeSettings("local", next);
-  }
+  await writeWithFallback("sync", next);
   return next;
 }
 
 export async function ensureDefaultSettings() {
-  let stored = {};
-  try {
-    stored = await chrome.storage.sync.get(STORAGE_KEY);
-  } catch {
-    // Sync unavailable (e.g. disabled) — fall through and try to seed local.
-  }
-  if (stored[STORAGE_KEY] == null) {
+  for (const area of ["sync", "local"]) {
     try {
-      await writeSettings("sync", { ...DEFAULT_SETTINGS });
+      if (!(await readStoredSettings(area))) {
+        await writeSettings(area, { ...DEFAULT_SETTINGS });
+      }
+      return;
     } catch {
-      await writeSettings("local", { ...DEFAULT_SETTINGS });
+      // Area unavailable — try the next.
     }
   }
 }
