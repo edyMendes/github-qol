@@ -175,6 +175,33 @@ describe("createSortButton", () => {
     expect(label.querySelector("svg.gqol-sort-button__icon")).not.toBeNull();
   });
 
+  it("renders a filter icon left of the chevron inside the label span", () => {
+    const button = createSortButton();
+    const label = button.querySelector(".gqol-sort-button__label");
+    const filter = label.querySelector("svg.gqol-sort-button__filter");
+    const chevron = label.querySelector("svg.gqol-sort-button__icon");
+    expect(filter).not.toBeNull();
+    expect(filter.compareDocumentPosition(chevron)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it("keeps the filter icon mounted across direction flips (CSS flip hook)", () => {
+    const button = createSortButton();
+
+    setSortDirection(button, false);
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+    expect(
+      button.querySelector("svg.gqol-sort-button__filter"),
+    ).not.toBeNull();
+
+    setSortDirection(button, true);
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    expect(
+      button.querySelector("svg.gqol-sort-button__filter"),
+    ).not.toBeNull();
+  });
+
   it("reports the flipped direction on click", () => {
     const onClick = vi.fn();
     const button = createSortButton({ onClick });

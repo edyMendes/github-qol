@@ -11,7 +11,7 @@
  * unit-tested directly.
  */
 
-import { chevronDownIcon, chevronUpIcon } from "./icons.js";
+import { chevronDownIcon, chevronUpIcon, filterLeftIcon } from "./icons.js";
 
 export const SORT_BUTTON_ID = "gqol-sort-button";
 export const SORT_ROW_CLASS = "gqol-sort-row";
@@ -57,9 +57,13 @@ export function setSortDirection(button, newestFirst) {
 
   const label = button.querySelector(".gqol-sort-button__label");
   if (label) {
-    label.innerHTML = newestFirst
-      ? chevronDownIcon("gqol-sort-button__icon")
-      : chevronUpIcon("gqol-sort-button__icon");
+    // The filter icon keeps a stable class so CSS can flip it upside down
+    // when the button shows the ascending (up chevron) direction.
+    label.innerHTML =
+      filterLeftIcon("gqol-sort-button__filter") +
+      (newestFirst
+        ? chevronDownIcon("gqol-sort-button__icon")
+        : chevronUpIcon("gqol-sort-button__icon"));
   }
 }
 
