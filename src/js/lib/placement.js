@@ -4,6 +4,8 @@
  * unit-tested without the content script's globals.
  */
 
+import { TIMELINE_FLOW_STOP_SELECTOR } from "../content/selectors.js";
+
 /**
  * Climb from an element to its top-level timeline item wrapper.
  */
@@ -77,13 +79,7 @@ export function findMergeBoxUnit(mergeBox, container, itemSelector) {
   while (node.parentElement) {
     const parent = node.parentElement;
     if (parent === container || parent === document.body) break;
-    if (
-      parent.matches?.(
-        "main, [data-turbo-body], [data-turbo-permanent], .js-discussion, .pull-discussion-timeline",
-      )
-    ) {
-      break;
-    }
+    if (parent.matches?.(TIMELINE_FLOW_STOP_SELECTOR)) break;
     const hasSiblingItem = [...parent.children].some(
       (child) => child !== node && child.matches?.(itemSelector),
     );

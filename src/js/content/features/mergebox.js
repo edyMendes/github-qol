@@ -179,34 +179,29 @@ function applyMergeBoxBelowDescription(enabled) {
     row.appendChild(unit);
   }
 
-  if (isMergeBoxPlaced(mergeBox)) {
-    mergeBox.setAttribute(MERGEBOX_MOVED_ATTR, "1");
-    applyMergeBoxStyles(mergeBox, unit);
-    markMergeAnchor(descContainer, row);
-    return true;
-  }
+  if (!isMergeBoxPlaced(mergeBox)) {
+    if (!mergeBoxAnchors.has(mergeBox)) {
+      const anchor = document.createComment("gqol-mergebox-anchor");
+      row.parentNode?.insertBefore(anchor, row);
+      mergeBoxAnchors.set(mergeBox, anchor);
+    }
 
-  if (!mergeBoxAnchors.has(mergeBox)) {
-    const anchor = document.createComment("gqol-mergebox-anchor");
-    row.parentNode?.insertBefore(anchor, row);
-    mergeBoxAnchors.set(mergeBox, anchor);
+    // Insert before the container's first timeline item — or before the
+    // already-placed comment box when it exists, so re-runs always settle
+    // as [hint][merge box][comment box][items]. Footer texts stay at the end.
+    const commentWrapper = [...container.children].find((child) =>
+      child.hasAttribute?.(COMMENT_BOX_MOVED_ATTR),
+    );
+    container.insertBefore(
+      row,
+      commentWrapper ?? findFirstTimelineItemChild(container) ?? null,
+    );
+    resetDomCache();
   }
-
-  // Insert before the container's first timeline item — or before the
-  // already-placed comment box when it exists, so re-runs always settle
-  // as [hint][merge box][comment box][items]. Footer texts stay at the end.
-  const commentWrapper = [...container.children].find((child) =>
-    child.hasAttribute?.(COMMENT_BOX_MOVED_ATTR),
-  );
-  container.insertBefore(
-    row,
-    commentWrapper ?? findFirstTimelineItemChild(container) ?? null,
-  );
 
   mergeBox.setAttribute(MERGEBOX_MOVED_ATTR, "1");
   applyMergeBoxStyles(mergeBox, unit);
   markMergeAnchor(descContainer, row);
-  resetDomCache();
   return true;
 }
 

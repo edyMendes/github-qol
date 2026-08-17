@@ -70,6 +70,8 @@ function getStatusDescriptor(settings) {
 }
 
 export function clearStatus() {
+  timelinePhase = null;
+  hydrationStartedAt = 0;
   if (statusRefreshInterval) {
     clearInterval(statusRefreshInterval);
     statusRefreshInterval = null;
@@ -80,8 +82,6 @@ export function clearStatus() {
 export function updateStatus(settings) {
   const descriptor = getStatusDescriptor(settings);
   if (!descriptor) {
-    timelinePhase = null;
-    hydrationStartedAt = 0;
     clearStatus();
     return;
   }

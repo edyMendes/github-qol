@@ -77,7 +77,7 @@ function findTimelineContainerUncached() {
       best = parent;
     }
   }
-  return best ?? items[0].parentElement;
+  return best;
 }
 
 export function findTimelineContainer() {
@@ -103,11 +103,16 @@ export function getDescriptionElement() {
   return cache.descriptionEl ?? computeDescriptionElement(cache);
 }
 
-function computeDescriptionElement(cache) {
-  const root = cache.discussionRoot;
-  const direct =
+/** Description element lookup shared by the element/container accessors. */
+function findDescElementIn(root) {
+  return (
     root.querySelector(PR_DESCRIPTION_TESTID_SELECTOR) ??
-    root.querySelector(PR_DESCRIPTION_ID_SELECTOR);
+    root.querySelector(PR_DESCRIPTION_ID_SELECTOR)
+  );
+}
+
+function computeDescriptionElement(cache) {
+  const direct = findDescElementIn(cache.discussionRoot);
   if (direct) {
     cache.descriptionEl = direct;
     return direct;
@@ -169,9 +174,7 @@ export function findDescriptionContainer() {
 
 function computeDescriptionContainer() {
   const root = getDiscussionRoot();
-  let descEl =
-    root.querySelector(PR_DESCRIPTION_TESTID_SELECTOR) ??
-    root.querySelector(PR_DESCRIPTION_ID_SELECTOR);
+  let descEl = findDescElementIn(root);
 
   if (!descEl) {
     const body = getDescriptionBody();

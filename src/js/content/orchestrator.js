@@ -43,14 +43,15 @@ let initialRetryTimeouts = [];
 let lastUrl = "";
 let isApplying = false;
 
-function runFeature(name, fn) {
+async function runFeature(name, fn) {
   try {
-    return fn();
+    return await fn();
   } catch (error) {
     console.warn(`GitHub QoL: ${name} failed.`, error);
     return false;
   } finally {
-    // Features mutate the DOM; the next feature must see fresh nodes.
+    // Features mutate the DOM; the next feature must see fresh nodes. The
+    // await above guarantees this also holds for async features.
     resetDomCache();
   }
 }
@@ -63,7 +64,8 @@ function needsWork(settings) {
 function resetAllFeatures() {
   // Reverse order: the reversal is undone first because it reorders the
   // container the other features live in; the sort row is independent but
-  // comes off first for the same reason.
+  // comes off first for the same reason. runFeature executes sync reset
+  // fns immediately, so the order holds; runFeature never rejects.
   for (const feature of [...FEATURES].reverse()) {
     runFeature(`${feature.name} reset`, feature.reset);
   }

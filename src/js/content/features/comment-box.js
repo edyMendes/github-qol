@@ -25,10 +25,11 @@ import {
   getTimelineItems,
   resetDomCache,
 } from "../dom-cache.js";
-import { COMMENT_BOX_MOVED_ATTR, TIMELINE_ITEM_SELECTOR } from "../selectors.js";
-
-const COMMENT_WRAPPER_STOP_SELECTOR =
-  "main, [data-turbo-body], [data-turbo-permanent], .js-discussion, .pull-discussion-timeline";
+import {
+  COMMENT_BOX_MOVED_ATTR,
+  TIMELINE_FLOW_STOP_SELECTOR,
+  TIMELINE_ITEM_SELECTOR,
+} from "../selectors.js";
 
 const COMMENT_BOX_AT_TOP_CLASS = "gqol-comment-box-at-top";
 const COMMENT_FOOTER_PATTERN =
@@ -126,7 +127,7 @@ function applyCommentBoxPlacement(enabled, newestFirst) {
   if (!form || !container) return false;
 
   const wrapper = findCommentWrapper(form, {
-    stopSelector: COMMENT_WRAPPER_STOP_SELECTOR,
+    stopSelector: TIMELINE_FLOW_STOP_SELECTOR,
     timelineContainer: container,
     timelineItem: getTimelineItems()[0] ?? null,
     mergeBox: findMergeBox(),
@@ -138,29 +139,25 @@ function applyCommentBoxPlacement(enabled, newestFirst) {
   // of the timeline so they stay at the bottom of the page.
   extractCommentFooters(wrapper, container);
 
-  if (isCommentBoxPlaced(wrapper, container)) {
-    wrapper.setAttribute(COMMENT_BOX_MOVED_ATTR, "1");
-    wrapper.classList.add(COMMENT_BOX_AT_TOP_CLASS);
-    return true;
-  }
+  if (!isCommentBoxPlaced(wrapper, container)) {
+    if (!commentBoxAnchors.has(wrapper)) {
+      const anchor = document.createComment("gqol-comment-box-anchor");
+      wrapper.parentNode?.insertBefore(anchor, wrapper);
+      commentBoxAnchors.set(wrapper, anchor);
+    }
 
-  if (!commentBoxAnchors.has(wrapper)) {
-    const anchor = document.createComment("gqol-comment-box-anchor");
-    wrapper.parentNode?.insertBefore(anchor, wrapper);
-    commentBoxAnchors.set(wrapper, anchor);
+    // Newest first: the box goes directly above the timeline items (the
+    // merge box feature runs first and holds the same anchor, so it settles
+    // between the hint and this box).
+    container.insertBefore(
+      wrapper,
+      findFirstTimelineItemChild(container) ?? null,
+    );
+    resetDomCache();
   }
-
-  // Newest first: the box goes directly above the timeline items (the
-  // merge box feature runs first and holds the same anchor, so it settles
-  // between the hint and this box).
-  container.insertBefore(
-    wrapper,
-    findFirstTimelineItemChild(container) ?? null,
-  );
 
   wrapper.setAttribute(COMMENT_BOX_MOVED_ATTR, "1");
   wrapper.classList.add(COMMENT_BOX_AT_TOP_CLASS);
-  resetDomCache();
   return true;
 }
 
@@ -172,7 +169,7 @@ function needsWorkCommentBox(settings) {
   const container = findTimelineContainer();
   if (!form || !container) return false;
   const wrapper = findCommentWrapper(form, {
-    stopSelector: COMMENT_WRAPPER_STOP_SELECTOR,
+    stopSelector: TIMELINE_FLOW_STOP_SELECTOR,
     timelineContainer: container,
     timelineItem: getTimelineItems()[0] ?? null,
     mergeBox: findMergeBox(),

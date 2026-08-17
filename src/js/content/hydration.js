@@ -25,7 +25,7 @@ const EAGER_FRAGMENT_SELECTOR =
  * once per call: a second synchronous clone cancels the fetch the first
  * one started.
  */
-function refetchIncludeFragments(root, selector = "include-fragment[src]", shouldSkip = () => false) {
+function refetchIncludeFragments(root, selector, shouldSkip = () => false) {
   root.querySelectorAll(selector).forEach((el) => {
     if (shouldSkip(el)) return;
     const src = el.getAttribute("src");

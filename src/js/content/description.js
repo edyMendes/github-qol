@@ -24,17 +24,15 @@ export function isMarkdownLoaded(body) {
 export function isDescriptionLoading(descEl) {
   if (!descEl?.isConnected) return false;
   const body = descEl.querySelector(".markdown-body, .js-comment-body");
-  if (!body || !isMarkdownLoaded(body)) {
-    if (body) {
-      return Boolean(body.querySelector(".Skeleton"));
-    }
+  if (!body) {
     return Boolean(
       descEl.querySelector(
         ".Skeleton, batch-deferred-content .Skeleton, include-fragment[loading]",
       ),
     );
   }
-  return false;
+  if (isMarkdownLoaded(body)) return false;
+  return Boolean(body.querySelector(".Skeleton"));
 }
 
 export function isDescriptionBodyLoading(body) {
@@ -51,18 +49,20 @@ export function isDescriptionBodyLoading(body) {
 
 function measureFullHeight(el) {
   if (!el?.isConnected) return 0;
-  const saved = {
-    maxHeight: el.style.maxHeight,
-    overflow: el.style.overflow,
-    height: el.style.height,
-  };
+  const { maxHeight, overflow, height } = el.style;
+  // Fast path (the common case): no inline constraints to lift, so one
+  // scrollHeight read is enough — scrollHeight reports the full content
+  // height even when a stylesheet clips it.
+  if (maxHeight === "" && overflow === "" && height === "") {
+    return el.scrollHeight;
+  }
   el.style.maxHeight = "none";
   el.style.overflow = "visible";
   el.style.height = "auto";
   const fullHeight = el.scrollHeight;
-  el.style.maxHeight = saved.maxHeight;
-  el.style.overflow = saved.overflow;
-  el.style.height = saved.height;
+  el.style.maxHeight = maxHeight;
+  el.style.overflow = overflow;
+  el.style.height = height;
   return fullHeight;
 }
 
