@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
-  collectTimelineItems,
   getDirectTimelineItems,
   reverseTimelineContainer,
   restoreTimelineOrder,
@@ -29,19 +28,6 @@ function order(container) {
 
 beforeEach(() => {
   document.body.innerHTML = "";
-});
-
-describe("collectTimelineItems", () => {
-  it("collects matching descendants from a root", () => {
-    const container = buildTimeline(["a", "b"]);
-    const nested = document.createElement("div");
-    nested.className = "js-timeline-item";
-    nested.dataset.gid = "c";
-    container.children[0].appendChild(nested);
-
-    const items = collectTimelineItems(container, SELECTOR);
-    expect(items.map((el) => el.dataset.gid)).toEqual(["a", "c", "b"]);
-  });
 });
 
 describe("getDirectTimelineItems", () => {

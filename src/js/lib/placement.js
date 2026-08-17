@@ -102,24 +102,39 @@ export function findMergeBoxUnit(mergeBox, container, itemSelector) {
  * `excludeContaining` drops candidates that contain elements matching
  * that selector BEFORE collapsing, so a form (or a form-wrapping
  * ancestor) never absorbs matches nested inside it.
+ *
+ * Perf: this runs on every revalidation pass, so instead of regex-testing
+ * textContent (which rebuilds the full subtree text) on EVERY descendant,
+ * it walks text nodes only — the cheap test — and re-checks just their
+ * ancestor chains, which is where a match can surface. Matches whose
+ * occurrence spans two text nodes without any single node matching are
+ * not expected for callout text and are not found.
  */
-export function findElementsByText(root, pattern, selector, options = {}) {
+export function findElementsByText(root, pattern, selector = "*", options = {}) {
   if (!root?.querySelectorAll) return [];
   const { excludeContaining = "" } = options;
 
-  let matches = [...root.querySelectorAll(selector)].filter((el) =>
-    pattern.test(el.textContent ?? ""),
-  );
-  if (excludeContaining) {
-    matches = matches.filter((el) => !el.querySelector(excludeContaining));
+  const candidates = new Set();
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!pattern.test(node.data)) continue;
+    for (let el = node.parentElement; el && el !== root; el = el.parentElement) {
+      candidates.add(el);
+    }
   }
 
+  const matches = [...candidates].filter(
+    (el) =>
+      el.matches(selector) &&
+      pattern.test(el.textContent ?? "") &&
+      !(excludeContaining && el.querySelector(excludeContaining)),
+  );
+
   // Collapse to the outermost matches: an element is kept unless one of
-  // its ancestors also matched (equivalent to, but cheaper than, testing
-  // every other match with contains()).
+  // its ancestors also matched.
   const matchSet = new Set(matches);
   return matches.filter((el) => {
-    for (let parent = el.parentElement; parent; parent = parent.parentElement) {
+    for (let parent = el.parentElement; parent && parent !== root; parent = parent.parentElement) {
       if (matchSet.has(parent)) return false;
     }
     return true;

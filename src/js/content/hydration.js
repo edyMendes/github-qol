@@ -6,6 +6,7 @@
 import { getDescriptionElement, getTimelineItems } from "./dom-cache.js";
 import { isMarkdownLoaded } from "./description.js";
 import { requestRevalidate } from "./bus.js";
+import { COMMENT_BOX_MOVED_ATTR } from "./selectors.js";
 
 const POST_CHANGE_RETRY_DELAYS = [0, 200, 800, 2000];
 const SKELETON_SELECTOR =
@@ -14,12 +15,19 @@ const SKELETON_SELECTOR =
 let postChangeRetryTimeouts = [];
 let lastDescriptionNudgeAt = 0;
 
+const LAZY_FRAGMENT_SELECTOR = "include-fragment[loading='lazy'][src]";
+const EAGER_FRAGMENT_SELECTOR =
+  "include-fragment[src]:not([loading='lazy'])";
+
 /**
  * Re-create include-fragment elements so GitHub refetches them (a fresh
- * clone restarts the lazy load).
+ * clone restarts the lazy load). Each fragment must be cloned at most
+ * once per call: a second synchronous clone cancels the fetch the first
+ * one started.
  */
-function refetchIncludeFragments(root, selector = "include-fragment[src]") {
+function refetchIncludeFragments(root, selector = "include-fragment[src]", shouldSkip = () => false) {
   root.querySelectorAll(selector).forEach((el) => {
+    if (shouldSkip(el)) return;
     const src = el.getAttribute("src");
     if (!src) return;
     const clone = el.cloneNode(false);
@@ -34,13 +42,24 @@ function forceLazyHydration(root) {
   const preserveDescription =
     descEl && descBody && isMarkdownLoaded(descBody) && descEl.contains(descBody);
 
+  // The relocated comment box lives INSIDE the timeline container once it
+  // moves to the top. Its deferred/React-managed content must never be
+  // cloned — a clone drops React state and leaves an empty box.
+  const movedCommentBox = document.querySelector(
+    `[${COMMENT_BOX_MOVED_ATTR}="1"]`,
+  );
+  const isInsideMovedCommentBox = (el) =>
+    Boolean(movedCommentBox?.contains(el));
+
   root.querySelectorAll("batch-deferred-content").forEach((el) => {
+    if (isInsideMovedCommentBox(el)) return;
     if (preserveDescription && descEl.contains(el)) return;
     if (el.querySelector(".markdown-body, .js-comment-body")) return;
     el.replaceWith(el.cloneNode(true));
   });
 
-  refetchIncludeFragments(root, "include-fragment[loading='lazy']");
+  // Lazy fragments only: eager ones are handled by the caller when needed.
+  refetchIncludeFragments(root, LAZY_FRAGMENT_SELECTOR, isInsideMovedCommentBox);
 }
 
 export function schedulePostChangeRetries(container) {
@@ -111,6 +130,8 @@ export function nudgeDescription() {
   lastDescriptionNudgeAt = now;
 
   forceLazyHydration(descEl);
-  refetchIncludeFragments(descEl);
+  // forceLazyHydration already restarted the lazy fragments; only
+  // re-fetch the eager ones here so no fragment is cloned twice.
+  refetchIncludeFragments(descEl, EAGER_FRAGMENT_SELECTOR);
   window.dispatchEvent(new Event("scroll"));
 }

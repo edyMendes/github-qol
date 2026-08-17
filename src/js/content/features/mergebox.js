@@ -22,6 +22,17 @@ const MERGEBOX_TIMELINE_ROW_CLASS = "gqol-mergebox-timeline-row";
 const MERGE_ANCHOR_ATTR = "data-gqol-merge-anchor";
 const STRIPPED_MERGE_CLASSES_ATTR = "data-gqol-stripped-merge-classes";
 const STRIPPED_CLASS_PREFIXES = ["tmp-ml-", "tmp-pl-", "tmp-mr-", "tmp-pr-"];
+// Decorative classes on the React "Stack" wrapper: the box look below the
+// description comes from the merge partial itself, so the wrapper must be
+// transparent. The `Stack` layout hook stays.
+const STRIPPED_UNIT_CLASSES = [
+  "border",
+  "bgColor-muted",
+  "rounded-2",
+  "mt-2",
+  "tmp-py-2",
+  "tmp-px-3",
+];
 
 const mergeBoxAnchors = new WeakMap();
 
@@ -36,20 +47,37 @@ function unwrapMergeRow(row) {
   }
 }
 
-function stripMergeSpacingClasses(mergeBox) {
+function stripMergeClasses(el, exactClasses = []) {
   const stripped = new Set(
-    (mergeBox.getAttribute(STRIPPED_MERGE_CLASSES_ATTR) ?? "")
+    (el.getAttribute(STRIPPED_MERGE_CLASSES_ATTR) ?? "")
       .split(/\s+/)
       .filter(Boolean),
   );
-  for (const cls of mergeBox.classList) {
-    if (STRIPPED_CLASS_PREFIXES.some((prefix) => cls.startsWith(prefix))) {
+  // Snapshot: removing from a live DOMTokenList during iteration skips entries.
+  for (const cls of [...el.classList]) {
+    const matches =
+      STRIPPED_CLASS_PREFIXES.some((prefix) => cls.startsWith(prefix)) ||
+      exactClasses.includes(cls);
+    if (matches) {
       stripped.add(cls);
-      mergeBox.classList.remove(cls);
+      el.classList.remove(cls);
     }
   }
   if (stripped.size > 0) {
-    mergeBox.setAttribute(STRIPPED_MERGE_CLASSES_ATTR, [...stripped].join(" "));
+    el.setAttribute(STRIPPED_MERGE_CLASSES_ATTR, [...stripped].join(" "));
+  }
+}
+
+/**
+ * Style the merge partial for its spot below the description. In the
+ * React "Stack" case the wrapper's decorative classes are stripped so
+ * only the partial's own box shows (no double border/padding).
+ */
+function applyMergeBoxStyles(mergeBox, unit) {
+  mergeBox.classList.add(MERGEBOX_BELOW_DESC_CLASS);
+  stripMergeClasses(mergeBox);
+  if (unit !== mergeBox) {
+    stripMergeClasses(unit, STRIPPED_UNIT_CLASSES);
   }
 }
 
@@ -63,63 +91,14 @@ function restoreStrippedClasses(mergeBox) {
   mergeBox.removeAttribute(STRIPPED_MERGE_CLASSES_ATTR);
 }
 
-function positionMergeBoxStyles(descContainer, row, mergeBox) {
+function markMergeAnchor(descContainer, row) {
   const anchorItem = findTimelineItemFor(row, TIMELINE_ITEM_SELECTOR) ??
     findTimelineItemFor(descContainer, TIMELINE_ITEM_SELECTOR);
 
   if (descContainer?.isConnected && descContainer !== anchorItem) {
     descContainer.removeAttribute(MERGE_ANCHOR_ATTR);
-    descContainer.style.removeProperty("--gqol-merge-timeline-gap");
   }
   if (anchorItem) anchorItem.setAttribute(MERGE_ANCHOR_ATTR, "1");
-
-  requestAnimationFrame(() => {
-    if (!row.isConnected || !mergeBox.isConnected) return;
-
-    const mergeabilityIcon =
-      mergeBox.querySelector("[data-testid='mergeability-icon-wrapper']") ??
-      mergeBox.querySelector("[class*='mergeabilityIcon']");
-    const rowRect = row.getBoundingClientRect();
-    const avatar =
-      anchorItem?.querySelector(".TimelineItem-avatar") ??
-      row.closest(".pull-discussion-timeline")?.querySelector(".TimelineItem-avatar");
-
-    if (avatar) {
-      const avatarRect = avatar.getBoundingClientRect();
-      const railX = avatarRect.left + avatarRect.width / 2 - rowRect.left - 1;
-      row.style.setProperty(
-        "--gqol-timeline-rail-x",
-        `${Math.max(0, Math.round(railX))}px`,
-      );
-    } else {
-      row.style.removeProperty("--gqol-timeline-rail-x");
-    }
-
-    if (mergeabilityIcon) {
-      const iconRect = mergeabilityIcon.getBoundingClientRect();
-      const centerY = iconRect.top + iconRect.height / 2 - rowRect.top;
-      row.style.setProperty(
-        "--gqol-merge-badge-center-y",
-        `${Math.max(0, Math.round(centerY))}px`,
-      );
-    } else {
-      row.style.removeProperty("--gqol-merge-badge-center-y");
-    }
-
-    const statusBottom = mergeBox.getBoundingClientRect().bottom - rowRect.top;
-    row.style.setProperty(
-      "--gqol-merge-status-bottom-y",
-      `${Math.max(0, Math.round(statusBottom))}px`,
-    );
-
-    if (anchorItem?.isConnected) {
-      const anchorBottom = anchorItem.getBoundingClientRect().bottom - rowRect.top;
-      anchorItem.style.setProperty(
-        "--gqol-merge-timeline-gap",
-        `${Math.max(0, Math.round(anchorBottom))}px`,
-      );
-    }
-  });
 }
 
 /**
@@ -158,10 +137,9 @@ function restoreMergeBox(mergeBox) {
 
   mergeBoxAnchors.delete(mergeBox);
   mergeBox.removeAttribute(MERGEBOX_MOVED_ATTR);
+  restoreStrippedClasses(unit);
   restoreStrippedClasses(mergeBox);
   mergeBox.classList.remove(MERGEBOX_BELOW_DESC_CLASS);
-  row?.style.removeProperty("--gqol-merge-badge-center-y");
-  row?.style.removeProperty("--gqol-merge-status-bottom-y");
 }
 
 function restoreAllMergeBoxes() {
@@ -170,7 +148,6 @@ function restoreAllMergeBoxes() {
   });
   document.querySelectorAll(`[${MERGE_ANCHOR_ATTR}="1"]`).forEach((anchor) => {
     anchor.removeAttribute(MERGE_ANCHOR_ATTR);
-    anchor.style.removeProperty("--gqol-merge-timeline-gap");
   });
   document.querySelectorAll(`.${MERGEBOX_TIMELINE_ROW_CLASS}`).forEach((row) => {
     unwrapMergeRow(row);
@@ -193,14 +170,6 @@ function applyMergeBoxBelowDescription(enabled) {
   // its native look, just below the description.
   const container = findTimelineContainer() ?? document.body;
   const unit = findMergeBoxUnit(mergeBox, container, TIMELINE_ITEM_SELECTOR) ?? mergeBox;
-  const isBarePartial = unit === mergeBox;
-
-  const styleUnit = () => {
-    if (isBarePartial) {
-      mergeBox.classList.add(MERGEBOX_BELOW_DESC_CLASS);
-      stripMergeSpacingClasses(mergeBox);
-    }
-  };
 
   let row = mergeBox.closest(`.${MERGEBOX_TIMELINE_ROW_CLASS}`);
   if (!row) {
@@ -212,8 +181,8 @@ function applyMergeBoxBelowDescription(enabled) {
 
   if (isMergeBoxPlaced(mergeBox)) {
     mergeBox.setAttribute(MERGEBOX_MOVED_ATTR, "1");
-    styleUnit();
-    positionMergeBoxStyles(descContainer, row, mergeBox);
+    applyMergeBoxStyles(mergeBox, unit);
+    markMergeAnchor(descContainer, row);
     return true;
   }
 
@@ -235,8 +204,8 @@ function applyMergeBoxBelowDescription(enabled) {
   );
 
   mergeBox.setAttribute(MERGEBOX_MOVED_ATTR, "1");
-  styleUnit();
-  positionMergeBoxStyles(descContainer, row, mergeBox);
+  applyMergeBoxStyles(mergeBox, unit);
+  markMergeAnchor(descContainer, row);
   resetDomCache();
   return true;
 }

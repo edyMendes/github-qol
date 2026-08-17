@@ -8,7 +8,6 @@
  * storage changes).
  */
 
-import { collectTimelineItems } from "../lib/timeline.js";
 import { TIMELINE_ITEM_SELECTOR } from "./selectors.js";
 
 const TIMELINE_PARTIAL_SELECTOR =
@@ -45,7 +44,7 @@ function getDomCache() {
 
   domCache = {
     discussionRoot,
-    timelineItems: collectTimelineItems(timelineRoot, TIMELINE_ITEM_SELECTOR),
+    timelineItems: [...timelineRoot.querySelectorAll(TIMELINE_ITEM_SELECTOR)],
     timelineContainer: findTimelineContainerUncached(),
   };
   return domCache;

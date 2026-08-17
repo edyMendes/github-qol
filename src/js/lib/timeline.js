@@ -3,10 +3,6 @@
  * so they can be unit-tested without the content script's globals.
  */
 
-export function collectTimelineItems(root, selector) {
-  return [...root.querySelectorAll(selector)];
-}
-
 export function getDirectTimelineItems(container, selector) {
   return [...container.children].filter((child) => child.matches(selector));
 }

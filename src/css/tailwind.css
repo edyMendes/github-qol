@@ -25,23 +25,3 @@
     background-color: var(--color-zinc-600);
   }
 }
-
-@layer utilities {
-  @keyframes deep-link-flash-keyframes {
-    0%,
-    100% {
-      box-shadow: none;
-    }
-
-    50% {
-      border-color: var(--color-blue-400);
-      box-shadow:
-        0 0 0 2px color-mix(in oklab, var(--color-blue-500) 55%, transparent),
-        0 0 14px color-mix(in oklab, var(--color-blue-500) 45%, transparent);
-    }
-  }
-
-  .deep-link-flash {
-    animation: deep-link-flash-keyframes 1.25s ease-in-out 2;
-  }
-}

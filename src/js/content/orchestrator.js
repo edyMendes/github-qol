@@ -191,7 +191,6 @@ export function onNavigation() {
 export function init() {
   registerBus({ applyNow: applyAll, requestRevalidate: scheduleRevalidate });
   lastUrl = pageKey();
-  document.documentElement.setAttribute("data-gqol-loaded", "1");
   scheduleInitialPasses();
   ensureGlobalObserver();
 }

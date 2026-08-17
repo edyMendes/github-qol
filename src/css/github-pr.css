@@ -114,16 +114,13 @@ html.dark .gqol-desc-toggle {
   padding-top: var(--base-size-4, 4px);
 }
 
-/* Merge box relocated below PR description — timeline rail connects at merge badge */
-html[data-gqol-active] {
-  --gqol-timeline-rail-x: 15px;
-  --gqol-merge-badge-center-y: 28px;
-  --gqol-merge-status-bottom-y: 100%;
-}
+/* Merge box relocated below PR description */
 
+/* The description's TimelineItem loses its native rail: nothing connects
+   to it while the merge box lives below the description. */
 html[data-gqol-active] .TimelineItem.js-comment-container[data-gqol-merge-anchor]::before,
 html[data-gqol-active] .js-timeline-item[data-gqol-merge-anchor]::before {
-  bottom: var(--gqol-merge-timeline-gap, 0px);
+  display: none;
 }
 
 html[data-gqol-active] .timeline-comment-group:has(.gqol-mergebox-timeline-row) {
@@ -171,30 +168,6 @@ html[data-gqol-active] .gqol-mergebox-below-desc[class*="tmp-pr-"] {
 html[data-gqol-active] .gqol-mergebox-below-desc [class*="mergePartialContainer"] {
   max-width: 100%;
   min-width: 0;
-}
-
-html[data-gqol-active] .gqol-mergebox-timeline-row::after {
-  content: "";
-  position: absolute;
-  left: var(--gqol-timeline-rail-x, 15px);
-  top: var(--gqol-merge-status-bottom-y, 100%);
-  bottom: 0;
-  width: 2px;
-  background-color: var(--borderColor-muted, var(--color-border-muted, #d0d7de));
-  z-index: 0;
-  pointer-events: none;
-}
-
-html[data-gqol-active] .gqol-mergebox-timeline-row::before {
-  content: "";
-  position: absolute;
-  left: var(--gqol-timeline-rail-x, 15px);
-  top: 0;
-  height: var(--gqol-merge-badge-center-y, 28px);
-  width: 2px;
-  background-color: var(--borderColor-muted, var(--color-border-muted, #d0d7de));
-  z-index: 3;
-  pointer-events: none;
 }
 
 html[data-gqol-active] .gqol-mergebox-below-desc [data-testid="mergebox-border-container"] {
@@ -298,9 +271,21 @@ html.dark .gqol-timeline-status__track {
   }
 }
 
-/* Comment box moved to the top of the timeline */
+/* Comment box moved to the top of the timeline.
+   The moved wrapper is often GitHub's <rails-partial> rendered with
+   display:contents — no box of its own, so our spacing/border would be
+   silently ignored. Force a real block box when relocated. */
 html[data-gqol-active] .gqol-comment-box-at-top {
+  display: block;
   margin-bottom: var(--base-size-16, 16px);
+  padding-bottom: var(--base-size-8, 8px);
+  border-bottom: 1px solid var(--borderColor-muted, var(--color-border-muted, #d0d7de));
+}
+
+[data-color-mode="dark"] .gqol-comment-box-at-top,
+.dark .gqol-comment-box-at-top,
+html.dark .gqol-comment-box-at-top {
+  border-bottom-color: var(--borderColor-muted, var(--color-border-muted, #30363d));
 }
 
 html[data-gqol-active] .gqol-comment-box-at-top.timeline-comment-wrapper,
