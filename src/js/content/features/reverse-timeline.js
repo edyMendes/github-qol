@@ -25,9 +25,9 @@ import {
   setTimelinePhase,
   updateStatus,
 } from "../status.js";
-import { TIMELINE_ITEM_SELECTOR } from "../selectors.js";
+import { TIMELINE_HYDRATION_TIMEOUT_MS } from "../hydration.js";
+import { REVERSED_ATTR, TIMELINE_ITEM_SELECTOR } from "../selectors.js";
 
-const HYDRATION_TIMEOUT_MS = 12000;
 const HYDRATION_TICK_MS = 250;
 const REORDER_DEBOUNCE_MS = 400;
 
@@ -43,7 +43,7 @@ function observeTimelineContainer(container) {
 
   observedTimelineContainer = container;
   timelineMutationObserver = new MutationObserver((mutations) => {
-    if (container.getAttribute("data-gqol-reverse") !== "1") return;
+    if (container.getAttribute(REVERSED_ATTR) !== "1") return;
 
     const addedItems = mutations
       .flatMap((mutation) => [...mutation.addedNodes])
@@ -80,7 +80,7 @@ function hydrateTimeline(container, onProgress) {
       resetDomCache();
       onProgress?.();
       if (container.isConnected && timelineHasLoadingContent(container)) {
-        if (Date.now() - startedAt >= HYDRATION_TIMEOUT_MS) {
+        if (Date.now() - startedAt >= TIMELINE_HYDRATION_TIMEOUT_MS) {
           resolve();
         } else {
           setTimeout(tick, HYDRATION_TICK_MS);
@@ -109,7 +109,7 @@ function undoReverseTimeline() {
   setTimelinePhase(null);
   setHydrationStartedAt(0);
 
-  document.querySelectorAll('[data-gqol-reverse="1"]').forEach((container) => {
+  document.querySelectorAll(`[${REVERSED_ATTR}="1"]`).forEach((container) => {
     if (restoreTimelineOrder(container, TIMELINE_ITEM_SELECTOR)) {
       schedulePostChangeRetries(container);
     }
@@ -130,7 +130,7 @@ async function applyReverseTimeline(enabled, settings) {
     return false;
   }
 
-  if (container.getAttribute("data-gqol-reverse") === "1") {
+  if (container.getAttribute(REVERSED_ATTR) === "1") {
     observeTimelineContainer(container);
     updateStatus(settings);
     return true;
@@ -167,7 +167,7 @@ function needsWorkReverseTimeline(settings) {
   const container = findTimelineContainer();
   if (getTimelineItems().length >= 2) {
     return Boolean(
-      container && container.getAttribute("data-gqol-reverse") !== "1",
+      container && container.getAttribute(REVERSED_ATTR) !== "1",
     );
   }
   return Boolean(container && timelineNeedsHydration(container));

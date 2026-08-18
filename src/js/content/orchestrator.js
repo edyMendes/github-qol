@@ -187,12 +187,10 @@ export function onNavigation() {
   resetAllFeatures();
   stopGlobalObserver();
   scheduleInitialPasses();
-  ensureGlobalObserver();
 }
 
 export function init() {
   registerBus({ applyNow: applyAll, requestRevalidate: scheduleRevalidate });
   lastUrl = pageKey();
   scheduleInitialPasses();
-  ensureGlobalObserver();
 }

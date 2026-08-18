@@ -18,16 +18,12 @@ function svgFromPath(className, path) {
   return `<svg class="${className}" aria-hidden="true" height="16" width="16" viewBox="0 0 16 16"><path d="${path}"/></svg>`;
 }
 
-function chevronSvg(className, path) {
-  return svgFromPath(className, path);
-}
-
 export function chevronDownIcon(className) {
-  return chevronSvg(className, CHEVRON_DOWN_PATH);
+  return svgFromPath(className, CHEVRON_DOWN_PATH);
 }
 
 export function chevronUpIcon(className) {
-  return chevronSvg(className, CHEVRON_UP_PATH);
+  return svgFromPath(className, CHEVRON_UP_PATH);
 }
 
 export function filterLeftIcon(className) {

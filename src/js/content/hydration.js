@@ -12,6 +12,10 @@ const POST_CHANGE_RETRY_DELAYS = [0, 200, 800, 2000];
 const SKELETON_SELECTOR =
   "batch-deferred-content .Skeleton, .commit-build-statuses .Skeleton, .js-updatable-content .Skeleton";
 
+/** How long the reversal waits for the timeline to finish loading before
+ * proceeding anyway; the status progress bar uses it as its denominator. */
+export const TIMELINE_HYDRATION_TIMEOUT_MS = 12000;
+
 let postChangeRetryTimeouts = [];
 let lastDescriptionNudgeAt = 0;
 
@@ -39,8 +43,9 @@ function refetchIncludeFragments(root, selector, shouldSkip = () => false) {
 function forceLazyHydration(root) {
   const descEl = getDescriptionElement();
   const descBody = descEl?.querySelector(".markdown-body, .js-comment-body");
-  const preserveDescription =
-    descEl && descBody && isMarkdownLoaded(descBody) && descEl.contains(descBody);
+  const preserveDescription = Boolean(
+    descEl && descBody && isMarkdownLoaded(descBody),
+  );
 
   // The relocated comment box lives INSIDE the timeline container once it
   // moves to the top. Its deferred/React-managed content must never be

@@ -214,18 +214,8 @@ function applyCollapseDescription(enabled) {
   nudgeDescription();
 
   const body = getDescriptionBody();
-  if (!body || isDescriptionBodyLoading(body)) return false;
-
-  if (isTallBody(body)) {
-    return collapseDescription(body);
-  }
-
-  requestAnimationFrame(() => {
-    if (body.isConnected && !isDescriptionBodyLoading(body)) {
-      collapseDescription(body);
-    }
-  });
-  return false;
+  if (!body) return false;
+  return collapseDescription(body);
 }
 
 function needsWorkCollapseDescription(settings) {

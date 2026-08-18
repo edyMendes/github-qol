@@ -3,6 +3,8 @@
  * so they can be unit-tested without the content script's globals.
  */
 
+import { REVERSED_ATTR } from "../content/selectors.js";
+
 export function getDirectTimelineItems(container, selector) {
   return [...container.children].filter((child) => child.matches(selector));
 }
@@ -53,7 +55,7 @@ export function restoreTimelineOrder(container, selector) {
       (item) => item.getAttribute("data-gid") ?? "",
     );
     changed = before.join("|") !== after.join("|");
-  } else if (container.getAttribute("data-gqol-reverse") === "1") {
+  } else if (container.getAttribute(REVERSED_ATTR) === "1") {
     if (items.length >= 2) {
       placeItemsInOrder(container, [...items].reverse(), selector);
       changed = true;
@@ -61,7 +63,7 @@ export function restoreTimelineOrder(container, selector) {
   }
 
   container.removeAttribute("data-gqol-timeline-gids");
-  container.removeAttribute("data-gqol-reverse");
+  container.removeAttribute(REVERSED_ATTR);
   return changed;
 }
 
@@ -75,11 +77,11 @@ export function reverseTimelineContainer(container, selector) {
   const items = getDirectTimelineItems(container, selector);
   if (items.length < 2) return false;
 
-  if (!container.hasAttribute("data-gqol-reverse")) {
+  if (!container.hasAttribute(REVERSED_ATTR)) {
     saveTimelineGids(container, selector);
   }
 
   placeItemsInOrder(container, [...items].reverse(), selector);
-  container.setAttribute("data-gqol-reverse", "1");
+  container.setAttribute(REVERSED_ATTR, "1");
   return true;
 }

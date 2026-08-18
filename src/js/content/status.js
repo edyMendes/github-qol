@@ -7,7 +7,12 @@
 import { getCachedSettings } from "./settings-cache.js";
 import { findTimelineContainer, getTimelineItems } from "./dom-cache.js";
 import { isPullRequestPage } from "./page.js";
-import { timelineHasLoadingContent, timelineNeedsHydration } from "./hydration.js";
+import {
+  TIMELINE_HYDRATION_TIMEOUT_MS,
+  timelineHasLoadingContent,
+  timelineNeedsHydration,
+} from "./hydration.js";
+import { REVERSED_ATTR } from "./selectors.js";
 
 const TIMELINE_STATUS_ID = "gqol-timeline-status";
 const STATUS_REFRESH_MS = 200;
@@ -30,7 +35,7 @@ function getStatusDescriptor(settings) {
   const container = findTimelineContainer();
   const items = getTimelineItems();
 
-  if (container?.getAttribute("data-gqol-reverse") === "1") return null;
+  if (container?.getAttribute(REVERSED_ATTR) === "1") return null;
 
   if (timelinePhase === "reversing") {
     return {
@@ -42,7 +47,7 @@ function getStatusDescriptor(settings) {
 
   if (timelinePhase === "hydrating" || (container && timelineHasLoadingContent(container))) {
     const elapsed = hydrationStartedAt ? Date.now() - hydrationStartedAt : 0;
-    const ratio = Math.min(1, elapsed / 12000);
+    const ratio = Math.min(1, elapsed / TIMELINE_HYDRATION_TIMEOUT_MS);
     return {
       label: "Loading timeline activity…",
       progress: 34 + 48 * ratio,
