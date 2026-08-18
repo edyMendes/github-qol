@@ -23,8 +23,10 @@ import {
   findFirstTimelineItemChild,
   findTimelineContainer,
   getTimelineItems,
+  isConversationRendered,
   resetDomCache,
 } from "../dom-cache.js";
+import { withinPostNavSwapWindow } from "../page.js";
 import {
   COMMENT_BOX_MOVED_ATTR,
   TIMELINE_FLOW_STOP_SELECTOR,
@@ -167,7 +169,12 @@ function needsWorkCommentBox(settings) {
   }
   const form = findCommentForm();
   const container = findTimelineContainer();
-  if (!form || !container) return false;
+  if (!form) {
+    // Absent form: pending only while the post-navigation swap may still
+    // be in flight and the conversation itself is rendered.
+    return withinPostNavSwapWindow() && isConversationRendered();
+  }
+  if (!container) return false;
   const wrapper = findCommentWrapper(form, {
     stopSelector: TIMELINE_FLOW_STOP_SELECTOR,
     timelineContainer: container,

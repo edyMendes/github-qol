@@ -13,3 +13,26 @@ export function pageKey() {
   // teardown/reapply cycle for them.
   return location.pathname + location.search;
 }
+
+// Timestamp of the last teardown/reapply cycle (navigation or boot). The
+// settle probe and the corruption recovery only act inside a window after
+// it — that is when GitHub's restore reconciliation races our applies.
+let lastNavigationAt = Date.now();
+
+export function markNavigationAt() {
+  lastNavigationAt = Date.now();
+}
+
+export function msSinceNavigation() {
+  return Date.now() - lastNavigationAt;
+}
+
+// How long after a navigation GitHub may still be swapping the restored
+// page. An absent merge box / comment form counts as pending work only
+// inside this window; beyond it, absence is the page's steady state
+// (locked PRs legitimately render neither).
+const POST_NAV_SWAP_WINDOW_MS = 90000;
+
+export function withinPostNavSwapWindow() {
+  return msSinceNavigation() < POST_NAV_SWAP_WINDOW_MS;
+}

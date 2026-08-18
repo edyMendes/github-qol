@@ -13,15 +13,13 @@ import { TIMELINE_ITEM_SELECTOR } from "./selectors.js";
 const TIMELINE_PARTIAL_SELECTOR =
   'rails-partial[data-partial-name="pullRequestsConversationsRoute.Timeline"]';
 const DISCUSSION_SELECTOR = ".js-discussion";
-const PR_DESCRIPTION_ID_SELECTOR = '[id^="pullrequest-"]';
-const PR_DESCRIPTION_TESTID_SELECTOR =
+export const PR_DESCRIPTION_ID_SELECTOR = '[id^="pullrequest-"]';
+export const PR_DESCRIPTION_TESTID_SELECTOR =
   '[data-testid="pull-request-description"]';
 const MERGEBOX_SELECTOR = '[data-testid="mergebox-partial"]';
 const COMMENT_FIELD_SELECTOR = "#new_comment_field";
 const COMMENT_FORM_SELECTOR =
   "form.js-new-comment-form, form#new_comment_form, form[data-testid='new-comment-form']";
-
-export { PR_DESCRIPTION_ID_SELECTOR, PR_DESCRIPTION_TESTID_SELECTOR };
 
 let domCache = null;
 
@@ -29,18 +27,22 @@ export function resetDomCache() {
   domCache = null;
 }
 
+/** First matching element for the selectors, else document.body. */
+function firstOf(...selectors) {
+  for (const selector of selectors) {
+    const el = document.querySelector(selector);
+    if (el) return el;
+  }
+  return document.body;
+}
+
 function getDomCache() {
   if (domCache) return domCache;
 
-  const discussionRoot =
-    document.querySelector(DISCUSSION_SELECTOR) ??
-    document.querySelector(TIMELINE_PARTIAL_SELECTOR) ??
-    document.body;
-
-  const timelineRoot =
-    document.querySelector(TIMELINE_PARTIAL_SELECTOR) ??
-    document.querySelector(DISCUSSION_SELECTOR) ??
-    document.body;
+  // Discussion reads prefer the legacy root, timeline reads the React
+  // partial — both fall through to the other, then the whole document.
+  const discussionRoot = firstOf(DISCUSSION_SELECTOR, TIMELINE_PARTIAL_SELECTOR);
+  const timelineRoot = firstOf(TIMELINE_PARTIAL_SELECTOR, DISCUSSION_SELECTOR);
 
   domCache = {
     discussionRoot,
@@ -89,9 +91,12 @@ export function getTimelineItems() {
 }
 
 export function findFirstTimelineItemChild(container) {
-  return [...(container?.children ?? [])].find((child) =>
-    child.matches(TIMELINE_ITEM_SELECTOR),
-  );
+  return container?.querySelector(`:scope > ${TIMELINE_ITEM_SELECTOR}`);
+}
+
+/** True when the description and at least two timeline items are rendered. */
+export function isConversationRendered() {
+  return Boolean(findDescriptionContainer()) && getTimelineItems().length >= 2;
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +108,7 @@ export function getDescriptionElement() {
   return cache.descriptionEl ?? computeDescriptionElement(cache);
 }
 
-/** Description element lookup shared by the element/container accessors. */
+/** Direct desc element inside `root`, else null. */
 function findDescElementIn(root) {
   return (
     root.querySelector(PR_DESCRIPTION_TESTID_SELECTOR) ??
@@ -112,22 +117,16 @@ function findDescElementIn(root) {
 }
 
 function computeDescriptionElement(cache) {
-  const direct = findDescElementIn(cache.discussionRoot);
-  if (direct) {
-    cache.descriptionEl = direct;
-    return direct;
-  }
-
+  // Discussion root first; else the first timeline item (the PR body item —
+  // falling back to the item itself); else anywhere in the document.
   const firstItem = cache.timelineItems[0];
-  const fromItem = firstItem
-    ? (firstItem.querySelector(PR_DESCRIPTION_TESTID_SELECTOR) ??
-        firstItem.querySelector(PR_DESCRIPTION_ID_SELECTOR) ??
-        firstItem)
-    : document.querySelector(PR_DESCRIPTION_TESTID_SELECTOR);
-  if (fromItem) {
-    cache.descriptionEl = fromItem;
-  }
-  return fromItem;
+  const el =
+    findDescElementIn(cache.discussionRoot) ??
+    (firstItem
+      ? (findDescElementIn(firstItem) ?? firstItem)
+      : document.querySelector(PR_DESCRIPTION_TESTID_SELECTOR));
+  if (el) cache.descriptionEl = el;
+  return el;
 }
 
 export function getDescriptionBody() {
@@ -147,11 +146,11 @@ function findBodyIn(root) {
 }
 
 function computeDescriptionBody() {
-  const direct = findBodyIn(getDiscussionRoot());
-  if (direct) return direct;
-
   const firstItem = getTimelineItems()[0];
-  return firstItem ? findBodyIn(firstItem) : null;
+  return (
+    findBodyIn(getDiscussionRoot()) ??
+    (firstItem ? findBodyIn(firstItem) : null)
+  );
 }
 
 // ---------------------------------------------------------------------------

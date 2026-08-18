@@ -12,8 +12,10 @@ import {
   findFirstTimelineItemChild,
   findMergeBox,
   findTimelineContainer,
+  isConversationRendered,
   resetDomCache,
 } from "../dom-cache.js";
+import { withinPostNavSwapWindow } from "../page.js";
 import { COMMENT_BOX_MOVED_ATTR, TIMELINE_ITEM_SELECTOR } from "../selectors.js";
 
 const MERGEBOX_BELOW_DESC_CLASS = "gqol-mergebox-below-desc";
@@ -208,7 +210,12 @@ function applyMergeBoxBelowDescription(enabled) {
 function needsWorkMergeBox(settings) {
   if (!settings.showMergeBoxBelowDescription) return false;
   const mergeBox = findMergeBox();
-  return Boolean(mergeBox && !isMergeBoxPlaced(mergeBox));
+  if (!mergeBox) {
+    // Absent box: pending only while the post-navigation swap may still be
+    // in flight and the conversation itself is rendered.
+    return withinPostNavSwapWindow() && isConversationRendered();
+  }
+  return !isMergeBoxPlaced(mergeBox);
 }
 
 export default {
