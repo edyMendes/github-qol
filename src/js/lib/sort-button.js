@@ -60,10 +60,10 @@ export function setSortDirection(button, newestFirst) {
     // The filter icon keeps a stable class so CSS can flip it upside down
     // when the button shows the ascending (up chevron) direction.
     label.innerHTML =
-      filterLeftIcon("gqol-sort-button__filter") +
       (newestFirst
         ? chevronDownIcon("gqol-sort-button__icon")
-        : chevronUpIcon("gqol-sort-button__icon"));
+        : chevronUpIcon("gqol-sort-button__icon")) +
+      filterLeftIcon("gqol-sort-button__filter");
   }
 }
 

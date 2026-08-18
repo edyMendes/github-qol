@@ -175,14 +175,15 @@ describe("createSortButton", () => {
     expect(label.querySelector("svg.gqol-sort-button__icon")).not.toBeNull();
   });
 
-  it("renders a filter icon left of the chevron inside the label span", () => {
+  it("renders the chevron left of the filter icon inside the label span", () => {
     const button = createSortButton();
     const label = button.querySelector(".gqol-sort-button__label");
     const filter = label.querySelector("svg.gqol-sort-button__filter");
     const chevron = label.querySelector("svg.gqol-sort-button__icon");
+    expect(chevron).not.toBeNull();
     expect(filter).not.toBeNull();
     expect(filter.compareDocumentPosition(chevron)).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
+      Node.DOCUMENT_POSITION_PRECEDING,
     );
   });
 
