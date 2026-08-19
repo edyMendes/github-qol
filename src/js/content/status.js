@@ -20,6 +20,9 @@ const STATUS_REFRESH_MS = 200;
 let statusRefreshInterval = null;
 let timelinePhase = null; // null | "hydrating" | "reversing"
 let hydrationStartedAt = 0;
+// Last rendered state: the 200ms refresh skips identical DOM writes, which
+// would otherwise be pure observer noise and style recalc.
+let lastRenderKey = null;
 
 export function setTimelinePhase(phase) {
   timelinePhase = phase;
@@ -77,6 +80,7 @@ function getStatusDescriptor(settings) {
 export function clearStatus() {
   timelinePhase = null;
   hydrationStartedAt = 0;
+  lastRenderKey = null;
   if (statusRefreshInterval) {
     clearInterval(statusRefreshInterval);
     statusRefreshInterval = null;
@@ -115,12 +119,17 @@ export function updateStatus(settings) {
 
   if (!labelEl || !barEl || !trackEl) return;
 
-  labelEl.textContent = descriptor.label;
-  barEl.style.width = `${Math.round(Math.min(98, Math.max(8, descriptor.progress)))}%`;
-  trackEl.classList.toggle(
-    "gqol-timeline-status__track--indeterminate",
-    descriptor.indeterminate,
-  );
+  const width = `${Math.round(Math.min(98, Math.max(8, descriptor.progress)))}%`;
+  const renderKey = `${descriptor.label}|${width}|${descriptor.indeterminate}`;
+  if (renderKey !== lastRenderKey) {
+    labelEl.textContent = descriptor.label;
+    barEl.style.width = width;
+    trackEl.classList.toggle(
+      "gqol-timeline-status__track--indeterminate",
+      descriptor.indeterminate,
+    );
+    lastRenderKey = renderKey;
+  }
 
   if (!statusRefreshInterval) {
     statusRefreshInterval = setInterval(() => {

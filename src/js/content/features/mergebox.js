@@ -7,6 +7,7 @@ import {
   findMergeBoxUnit,
   findTimelineItemFor,
 } from "../../lib/placement.js";
+import { anchorBefore, restoreAtAnchor } from "../../lib/anchor.js";
 import {
   findDescriptionContainer,
   findFirstTimelineItemChild,
@@ -127,11 +128,9 @@ function isMergeBoxPlaced(mergeBox) {
 function restoreMergeBox(mergeBox) {
   const row = mergeBox.closest(`.${MERGEBOX_TIMELINE_ROW_CLASS}`);
   const unit = row?.firstElementChild ?? mergeBox;
-  const anchor = mergeBoxAnchors.get(mergeBox);
 
-  if (anchor?.parentNode) {
-    anchor.parentNode.insertBefore(unit, anchor.nextSibling);
-    anchor.remove();
+  // Anchor keyed by the partial, but the whole unit returns home.
+  if (restoreAtAnchor(mergeBoxAnchors, mergeBox, unit)) {
     row?.remove();
   } else if (row) {
     unwrapMergeRow(row);
@@ -182,11 +181,8 @@ function applyMergeBoxBelowDescription(enabled) {
   }
 
   if (!isMergeBoxPlaced(mergeBox)) {
-    if (!mergeBoxAnchors.has(mergeBox)) {
-      const anchor = document.createComment("gqol-mergebox-anchor");
-      row.parentNode?.insertBefore(anchor, row);
-      mergeBoxAnchors.set(mergeBox, anchor);
-    }
+    // Anchor keyed by the partial, placed next to the row that travels.
+    anchorBefore(mergeBoxAnchors, mergeBox, row, "gqol-mergebox-anchor");
 
     // Insert before the container's first timeline item — or before the
     // already-placed comment box when it exists, so re-runs always settle

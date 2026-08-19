@@ -18,6 +18,7 @@ import {
   schedulePostChangeRetries,
   timelineHasLoadingContent,
   timelineNeedsHydration,
+  TIMELINE_HYDRATION_TIMEOUT_MS,
 } from "../hydration.js";
 import {
   clearStatus,
@@ -25,7 +26,6 @@ import {
   setTimelinePhase,
   updateStatus,
 } from "../status.js";
-import { TIMELINE_HYDRATION_TIMEOUT_MS } from "../hydration.js";
 import { REVERSED_ATTR, TIMELINE_ITEM_SELECTOR } from "../selectors.js";
 
 const HYDRATION_TICK_MS = 250;

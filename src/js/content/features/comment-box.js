@@ -17,6 +17,7 @@ import {
   findElementsByText,
   isPlacedBeforeTimelineItems,
 } from "../../lib/placement.js";
+import { anchorBefore, restoreAtAnchor } from "../../lib/anchor.js";
 import {
   findCommentForm,
   findMergeBox,
@@ -52,13 +53,22 @@ function isCommentBoxPlaced(wrapper, container) {
   return isPlacedBeforeTimelineItems(wrapper, container, TIMELINE_ITEM_SELECTOR);
 }
 
+/** Form + container + top-level wrapper for the comment box, in one lookup. */
+function resolveCommentWrapper() {
+  const form = findCommentForm();
+  const container = findTimelineContainer();
+  if (!form || !container) return { form, container, wrapper: null };
+  const wrapper = findCommentWrapper(form, {
+    stopSelector: TIMELINE_FLOW_STOP_SELECTOR,
+    timelineContainer: container,
+    timelineItem: getTimelineItems()[0] ?? null,
+    mergeBox: findMergeBox(),
+  });
+  return { form, container, wrapper };
+}
+
 function restoreCommentBox(wrapper) {
-  const anchor = commentBoxAnchors.get(wrapper);
-  if (anchor?.parentNode) {
-    anchor.parentNode.insertBefore(wrapper, anchor.nextSibling);
-    anchor.remove();
-  }
-  commentBoxAnchors.delete(wrapper);
+  restoreAtAnchor(commentBoxAnchors, wrapper, wrapper);
   wrapper.removeAttribute(COMMENT_BOX_MOVED_ATTR);
   wrapper.classList.remove(COMMENT_BOX_AT_TOP_CLASS);
 }
@@ -84,11 +94,7 @@ function extractCommentFooters(wrapper, container) {
       Number(Boolean(GUIDELINES_PATTERN.test(a.textContent ?? ""))),
   );
   for (const footer of footers) {
-    if (!commentFooterAnchors.has(footer)) {
-      const anchor = document.createComment("gqol-comment-footer-anchor");
-      footer.parentNode?.insertBefore(anchor, footer);
-      commentFooterAnchors.set(footer, anchor);
-    }
+    anchorBefore(commentFooterAnchors, footer, footer, "gqol-comment-footer-anchor");
     container.appendChild(footer);
     footer.setAttribute(COMMENT_FOOTER_MOVED_ATTR, "1");
     moved = true;
@@ -100,12 +106,7 @@ function restoreCommentFooters() {
   document
     .querySelectorAll(`[${COMMENT_FOOTER_MOVED_ATTR}="1"]`)
     .forEach((footer) => {
-      const anchor = commentFooterAnchors.get(footer);
-      if (anchor?.parentNode) {
-        anchor.parentNode.insertBefore(footer, anchor.nextSibling);
-        anchor.remove();
-      }
-      commentFooterAnchors.delete(footer);
+      restoreAtAnchor(commentFooterAnchors, footer, footer);
       footer.removeAttribute(COMMENT_FOOTER_MOVED_ATTR);
     });
 }
@@ -124,17 +125,8 @@ function applyCommentBoxPlacement(enabled, newestFirst) {
     return false;
   }
 
-  const form = findCommentForm();
-  const container = findTimelineContainer();
-  if (!form || !container) return false;
-
-  const wrapper = findCommentWrapper(form, {
-    stopSelector: TIMELINE_FLOW_STOP_SELECTOR,
-    timelineContainer: container,
-    timelineItem: getTimelineItems()[0] ?? null,
-    mergeBox: findMergeBox(),
-  });
-  if (!wrapper) return false;
+  const { container, wrapper } = resolveCommentWrapper();
+  if (!container || !wrapper) return false;
 
   // The guidelines/ProTip footer texts live INSIDE the comment box; when
   // the box moves to the top they must be pulled out and pinned to the end
@@ -142,11 +134,7 @@ function applyCommentBoxPlacement(enabled, newestFirst) {
   extractCommentFooters(wrapper, container);
 
   if (!isCommentBoxPlaced(wrapper, container)) {
-    if (!commentBoxAnchors.has(wrapper)) {
-      const anchor = document.createComment("gqol-comment-box-anchor");
-      wrapper.parentNode?.insertBefore(anchor, wrapper);
-      commentBoxAnchors.set(wrapper, anchor);
-    }
+    anchorBefore(commentBoxAnchors, wrapper, wrapper, "gqol-comment-box-anchor");
 
     // Newest first: the box goes directly above the timeline items (the
     // merge box feature runs first and holds the same anchor, so it settles
@@ -167,20 +155,13 @@ function needsWorkCommentBox(settings) {
   if (!settings.commentBoxAtTop || !settings.reverseTimeline) {
     return Boolean(document.querySelector(MOVED_MARKERS_SELECTOR));
   }
-  const form = findCommentForm();
-  const container = findTimelineContainer();
+  const { form, container, wrapper } = resolveCommentWrapper();
   if (!form) {
     // Absent form: pending only while the post-navigation swap may still
     // be in flight and the conversation itself is rendered.
     return withinPostNavSwapWindow() && isConversationRendered();
   }
   if (!container) return false;
-  const wrapper = findCommentWrapper(form, {
-    stopSelector: TIMELINE_FLOW_STOP_SELECTOR,
-    timelineContainer: container,
-    timelineItem: getTimelineItems()[0] ?? null,
-    mergeBox: findMergeBox(),
-  });
   return Boolean(
     wrapper &&
       (!isCommentBoxPlaced(wrapper, container) ||
