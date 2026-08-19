@@ -1,10 +1,35 @@
 /**
- * Pure placement helpers for moving elements around the PR timeline.
- * All functions take explicit elements/selectors so they can be
- * unit-tested without the content script's globals.
+ * Placement helpers for moving elements around the PR timeline.
+ * All functions take explicit elements/selectors: they touch the document
+ * only through their arguments (plus document.body as a climb boundary),
+ * so they unit-test without any content-script module state.
  */
 
-import { TIMELINE_FLOW_STOP_SELECTOR } from "../content/selectors.js";
+import {
+  COMMENT_BOX_MOVED_ATTR,
+  TIMELINE_FLOW_STOP_SELECTOR,
+} from "./selectors.js";
+
+/** Climb from `el` through ancestors until `shouldStop` approves a parent. */
+function climbFrom(el, shouldStop) {
+  let node = el;
+  while (node.parentElement) {
+    const parent = node.parentElement;
+    if (shouldStop(parent, node)) break;
+    node = parent;
+  }
+  return node;
+}
+
+/**
+ * The direct child of `container` marked as the moved comment box, or null.
+ */
+export function findMovedCommentBox(container) {
+  return (
+    container?.querySelector(`:scope > [${COMMENT_BOX_MOVED_ATTR}="1"]`) ??
+    null
+  );
+}
 
 /**
  * Climb from an element to its top-level timeline item wrapper.
@@ -36,17 +61,15 @@ export function findCommentWrapper(form, options = {}) {
 
   if (!form?.isConnected) return null;
 
-  let node = form;
-  while (node.parentElement) {
-    const parent = node.parentElement;
-    if (parent === document.body) break;
-    if (stopSelector && parent.matches(stopSelector)) break;
-    if (timelineContainer && parent.contains(timelineContainer)) break;
-    if (timelineItem && parent.contains(timelineItem)) break;
-    if (mergeBox && parent.contains(mergeBox) && !node.contains(mergeBox)) break;
-    node = parent;
-  }
-  return node;
+  return climbFrom(
+    form,
+    (parent, node) =>
+      parent === document.body ||
+      (stopSelector && parent.matches(stopSelector)) ||
+      (timelineContainer && parent.contains(timelineContainer)) ||
+      (timelineItem && parent.contains(timelineItem)) ||
+      (mergeBox && parent.contains(mergeBox) && !node.contains(mergeBox)),
+  );
 }
 
 /**
@@ -75,18 +98,13 @@ export function isPlacedBeforeTimelineItems(wrapper, container, selector) {
 export function findMergeBoxUnit(mergeBox, container, itemSelector) {
   if (!mergeBox?.isConnected || !container) return null;
 
-  let node = mergeBox;
-  while (node.parentElement) {
-    const parent = node.parentElement;
-    if (parent === container || parent === document.body) break;
-    if (parent.matches?.(TIMELINE_FLOW_STOP_SELECTOR)) break;
-    const hasSiblingItem = [...parent.children].some(
-      (child) => child !== node && child.matches?.(itemSelector),
+  return climbFrom(mergeBox, (parent, node) => {
+    if (parent === container || parent === document.body) return true;
+    if (parent.matches(TIMELINE_FLOW_STOP_SELECTOR)) return true;
+    return [...parent.children].some(
+      (child) => child !== node && child.matches(itemSelector),
     );
-    if (hasSiblingItem) break;
-    node = parent;
-  }
-  return node;
+  });
 }
 
 /**
@@ -102,9 +120,12 @@ export function findMergeBoxUnit(mergeBox, container, itemSelector) {
  * Perf: this runs on every revalidation pass, so instead of regex-testing
  * textContent (which rebuilds the full subtree text) on EVERY descendant,
  * it walks text nodes only — the cheap test — and re-checks just their
- * ancestor chains, which is where a match can surface. Matches whose
- * occurrence spans two text nodes without any single node matching are
- * not expected for callout text and are not found.
+ * ancestor chains, which is where a match can surface. Ancestors of a
+ * matching text node contain that node, so their textContent necessarily
+ * matches too (requires a non-global pattern, which all callers pass —
+ * global patterns carry lastIndex state and would break the walk anyway).
+ * Matches whose occurrence spans two text nodes without any single node
+ * matching are not expected for callout text and are not found.
  */
 export function findElementsByText(root, pattern, selector = "*", options = {}) {
   if (!root?.querySelectorAll) return [];
@@ -122,7 +143,6 @@ export function findElementsByText(root, pattern, selector = "*", options = {}) 
   const matches = [...candidates].filter(
     (el) =>
       el.matches(selector) &&
-      pattern.test(el.textContent ?? "") &&
       !(excludeContaining && el.querySelector(excludeContaining)),
   );
 

@@ -6,11 +6,12 @@
 import { getDescriptionElement, getTimelineItems } from "./dom-cache.js";
 import { isMarkdownLoaded } from "./description.js";
 import { requestRevalidate } from "./bus.js";
-import { COMMENT_BOX_MOVED_ATTR } from "./selectors.js";
+import {
+  MARKDOWN_BODY_SELECTOR,
+  SKELETON_SELECTOR,
+} from "../lib/selectors.js";
 
 const POST_CHANGE_RETRY_DELAYS = [0, 200, 800, 2000];
-const SKELETON_SELECTOR =
-  "batch-deferred-content .Skeleton, .commit-build-statuses .Skeleton, .js-updatable-content .Skeleton";
 
 /** How long the reversal waits for the timeline to finish loading before
  * proceeding anyway; the status progress bar uses it as its denominator. */
@@ -40,31 +41,42 @@ function refetchIncludeFragments(root, selector, shouldSkip = () => false) {
   });
 }
 
+/**
+ * Elements whose deferred/React-managed content must never be re-cloned
+ * (a clone drops React state and leaves an empty shell). Features that
+ * relocate such elements register a region provider here instead of
+ * hydration knowing about any specific feature's marker.
+ */
+const protectedRegionProviders = new Set();
+
+export function registerProtectedRegion(provider) {
+  protectedRegionProviders.add(provider);
+}
+
+function isInsideProtectedRegion(el) {
+  for (const provide of protectedRegionProviders) {
+    const region = provide();
+    if (region && region.contains(el)) return true;
+  }
+  return false;
+}
+
 function forceLazyHydration(root) {
   const descEl = getDescriptionElement();
-  const descBody = descEl?.querySelector(".markdown-body, .js-comment-body");
+  const descBody = descEl?.querySelector(MARKDOWN_BODY_SELECTOR);
   const preserveDescription = Boolean(
     descEl && descBody && isMarkdownLoaded(descBody),
   );
 
-  // The relocated comment box lives INSIDE the timeline container once it
-  // moves to the top. Its deferred/React-managed content must never be
-  // cloned — a clone drops React state and leaves an empty box.
-  const movedCommentBox = document.querySelector(
-    `[${COMMENT_BOX_MOVED_ATTR}="1"]`,
-  );
-  const isInsideMovedCommentBox = (el) =>
-    Boolean(movedCommentBox?.contains(el));
-
   root.querySelectorAll("batch-deferred-content").forEach((el) => {
-    if (isInsideMovedCommentBox(el)) return;
+    if (isInsideProtectedRegion(el)) return;
     if (preserveDescription && descEl.contains(el)) return;
-    if (el.querySelector(".markdown-body, .js-comment-body")) return;
+    if (el.querySelector(MARKDOWN_BODY_SELECTOR)) return;
     el.replaceWith(el.cloneNode(true));
   });
 
   // Lazy fragments only: eager ones are handled by the caller when needed.
-  refetchIncludeFragments(root, LAZY_FRAGMENT_SELECTOR, isInsideMovedCommentBox);
+  refetchIncludeFragments(root, LAZY_FRAGMENT_SELECTOR, isInsideProtectedRegion);
 }
 
 export function schedulePostChangeRetries(container) {
@@ -87,26 +99,34 @@ export function cancelPostChangeRetries() {
   postChangeRetryTimeouts = [];
 }
 
-function allSkeletonsInsideDescription(container) {
+function allSkeletonsInsideDescription(container, skeletons) {
   const descEl = getDescriptionElement();
   if (!descEl || !container.contains(descEl)) return false;
-  const skeletons = container.querySelectorAll(SKELETON_SELECTOR);
-  return skeletons.length !== 0 && [...skeletons].every((el) => descEl.contains(el));
+  return (
+    skeletons.length !== 0 && [...skeletons].every((el) => descEl.contains(el))
+  );
 }
 
-export function timelineHasLoadingContent(container) {
+/**
+ * True while the timeline still shows loading placeholders. `skeletons`
+ * may be precomputed (the status hot path queries them once and shares
+ * the result with every predicate below).
+ */
+export function timelineHasLoadingContent(container, skeletons = null) {
+  const found = skeletons ?? container.querySelectorAll(SKELETON_SELECTOR);
   return (
-    container.querySelectorAll(SKELETON_SELECTOR).length > 0 &&
+    found.length > 0 &&
     !(
       getTimelineItems().length >= 2 &&
-      allSkeletonsInsideDescription(container)
+      allSkeletonsInsideDescription(container, found)
     )
   );
 }
 
-export function timelineNeedsHydration(container) {
+/** Same contract as timelineHasLoadingContent, with a precomputed verdict. */
+export function timelineNeedsHydration(container, hasLoadingContent = null) {
   if (!container) return false;
-  if (timelineHasLoadingContent(container)) return true;
+  if (hasLoadingContent ?? timelineHasLoadingContent(container)) return true;
 
   const deferred = container.querySelectorAll(
     "batch-deferred-content, include-fragment[loading]",
@@ -117,9 +137,8 @@ export function timelineNeedsHydration(container) {
   // else in the timeline means items still need to be fetched.
   const descEl = getDescriptionElement();
   const descriptionReady = Boolean(descEl && getTimelineItems().length >= 2);
-  return (
-    !descriptionReady || ![...deferred].every((el) => descEl.contains(el))
-  );
+  if (!descriptionReady) return true;
+  return ![...deferred].every((el) => descEl.contains(el));
 }
 
 export function resetNudgeTimer() {
@@ -128,7 +147,7 @@ export function resetNudgeTimer() {
 
 export function nudgeDescription() {
   const descEl = getDescriptionElement();
-  if (!descEl || descEl.querySelector(".markdown-body, .js-comment-body")) return;
+  if (!descEl || descEl.querySelector(MARKDOWN_BODY_SELECTOR)) return;
 
   const now = Date.now();
   if (now - lastDescriptionNudgeAt < 3000) return;

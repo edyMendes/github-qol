@@ -1,9 +1,9 @@
 /**
- * Pure timeline DOM helpers. All functions take explicit elements/selectors
+ * Timeline DOM helpers. All functions take explicit elements/selectors
  * so they can be unit-tested without the content script's globals.
  */
 
-import { REVERSED_ATTR } from "../content/selectors.js";
+import { REVERSED_ATTR, TIMELINE_GIDS_ATTR } from "./selectors.js";
 
 export function getDirectTimelineItems(container, selector) {
   return [...container.children].filter((child) => child.matches(selector));
@@ -14,7 +14,7 @@ function saveTimelineGids(container, selector) {
   const gids = items
     .map((item) => item.getAttribute("data-gid") ?? "")
     .join("|");
-  container.setAttribute("data-gqol-timeline-gids", gids);
+  container.setAttribute(TIMELINE_GIDS_ATTR, gids);
 }
 
 /**
@@ -37,7 +37,7 @@ function placeItemsInOrder(container, orderedItems, selector) {
  * reversing again. Returns true if any reorder happened.
  */
 export function restoreTimelineOrder(container, selector) {
-  const savedGids = container.getAttribute("data-gqol-timeline-gids");
+  const savedGids = container.getAttribute(TIMELINE_GIDS_ATTR);
   const items = getDirectTimelineItems(container, selector);
   let changed = false;
 
@@ -62,7 +62,7 @@ export function restoreTimelineOrder(container, selector) {
     }
   }
 
-  container.removeAttribute("data-gqol-timeline-gids");
+  container.removeAttribute(TIMELINE_GIDS_ATTR);
   container.removeAttribute(REVERSED_ATTR);
   return changed;
 }

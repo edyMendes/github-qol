@@ -2,18 +2,30 @@
  * Orchestrator: owns the feature registry, the apply/revalidate lifecycle,
  * the global mutation observer and navigation handling.
  *
- * One entry per feature: apply(settings) runs it, needsWork(settings)
- * reports whether it still has something to do, reset() tears every trace
- * of it down. applyAll / needsWork / onNavigation all iterate this list —
- * adding a feature means adding one object, not editing four call sites.
+ * Feature contract (every entry in FEATURES):
+ * - name:            identifier used in logs and per-feature bookkeeping.
+ * - apply(settings): runs the feature. MAY be async — a pass holds while
+ *                    it awaits (e.g. reverse-timeline's hydration hold of
+ *                    up to 12s); calls landing mid-pass are compensated by
+ *                    a rerun when it finishes. Returns whether it did work
+ *                    this pass (drives nothing critical — diagnostics).
+ * - needsWork(settings): reports whether the feature still has something
+ *                    to do; keeps the retry ladder and observer alive.
+ * - reset():         synchronous teardown of every trace of the feature.
+ * - status(settings) [optional]: progress descriptor ({label, progress,
+ *                    indeterminate} | null) for the status card. At most
+ *                    one feature provides it (last registration wins).
+ * - recovery [optional]: declares an element whose disappearance after
+ *                    being seen (with the DOM settled) means GitHub
+ *                    dropped our moved subtree — the page reloads once:
+ *                    { expectedWhen(settings), isPresent() }.
+ *
+ * Apply order is the array order; teardown runs reversed. Adding a
+ * feature means adding one object here, not editing four call sites.
  */
 
 import { getCachedSettings } from "./settings-cache.js";
-import {
-  findCommentForm,
-  findMergeBox,
-  resetDomCache,
-} from "./dom-cache.js";
+import { resetDomCache } from "./dom-cache.js";
 import {
   isPullRequestPage,
   markNavigationAt,
@@ -21,7 +33,11 @@ import {
   pageKey,
 } from "./page.js";
 import { nudgeDescription, resetNudgeTimer } from "./hydration.js";
-import { clearStatus, updateStatus } from "./status.js";
+import {
+  clearStatusCard,
+  renderStatus,
+  setProgressProvider,
+} from "./status.js";
 import { registerBus } from "./bus.js";
 import collapseDescription from "./features/collapse-description.js";
 import mergeboxBelowDescription from "./features/mergebox.js";
@@ -56,9 +72,12 @@ const REVALIDATE_DEBOUNCE_MS = 600;
 const SETTLE_PROBE_MS = 250;
 const SETTLE_PROBE_GRACE_MS = 10000;
 
-// Recovery for the corrupted state (merge box / comment form seen earlier,
-// gone after the DOM settled): one reload per page key per session.
+// Recovery for the corrupted state (an expected element seen earlier, gone
+// after the DOM settled): one reload per page key per session. Recovery
+// markers are pruned so a long session cannot accumulate them unboundedly.
 const RECOVERY_MIN_DELAY_MS = 6000;
+const RECOVERY_MARKER_LIMIT = 20;
+const RECOVERY_MARKER_PREFIX = "gqol-reloaded:";
 
 // Apply order matters: collapse first (reads the description in place),
 // then the moves, then the reversal (reorders the container the others
@@ -81,7 +100,8 @@ let isApplying = false;
 let rerunAfterPass = false;
 // Which key elements were seen on the current page key — the baseline that
 // lets "gone" be told apart from "never rendered" (locked PRs etc.).
-let seenOnPage = { mergeBox: false, commentForm: false };
+// Keyed by feature name, filled from each feature's recovery declaration.
+let seenOnPage = new Map();
 
 /**
  * Resolve true when no external (GitHub) mutation lands within the probe
@@ -113,10 +133,25 @@ export function setReloadForTests(fn) {
   reloadPage = fn ?? (() => location.reload());
 }
 
+/** Keep recovery markers bounded: drop the oldest beyond the cap. */
+function pruneRecoveryMarkers() {
+  const keys = [];
+  for (let i = 0; i < sessionStorage.length; i++) {
+    const key = sessionStorage.key(i);
+    if (key?.startsWith(RECOVERY_MARKER_PREFIX)) keys.push(key);
+  }
+  while (keys.length > RECOVERY_MARKER_LIMIT - 1) {
+    sessionStorage.removeItem(keys.shift());
+  }
+}
+
 function reloadOncePerKey() {
   try {
-    if (sessionStorage.getItem(`gqol-reloaded:${pageKey()}`)) return false;
-    sessionStorage.setItem(`gqol-reloaded:${pageKey()}`, "1");
+    if (sessionStorage.getItem(`${RECOVERY_MARKER_PREFIX}${pageKey()}`)) {
+      return false;
+    }
+    pruneRecoveryMarkers();
+    sessionStorage.setItem(`${RECOVERY_MARKER_PREFIX}${pageKey()}`, "1");
   } catch {
     return false;
   }
@@ -124,21 +159,32 @@ function reloadOncePerKey() {
   return true;
 }
 
+/** Record which recovery-declared elements currently exist on the page. */
+function updateSeenElements(settings) {
+  for (const feature of FEATURES) {
+    if (!feature.recovery) continue;
+    if (!feature.recovery.expectedWhen(settings)) continue;
+    if (seenOnPage.get(feature.name)) continue;
+    if (feature.recovery.isPresent()) seenOnPage.set(feature.name, true);
+  }
+}
+
 /**
- * The corrupted state: merge box / comment form existed earlier on this
- * page key, the DOM has settled after the navigation, and they are still
- * gone. GitHub will not re-render them on its own — reload once to get a
- * clean page (the settle probe then keeps the reload clean too).
- * Returns true when a reload was actually triggered.
+ * The corrupted state: an element a feature expects and had seen earlier
+ * on this page key is still gone after the DOM settled. GitHub will not
+ * re-render it on its own — reload once to get a clean page (the settle
+ * probe then keeps the reload clean too). Returns true when a reload was
+ * actually triggered.
  */
 function maybeRecoverCorruptedPage(settings) {
   if (msSinceNavigation() < RECOVERY_MIN_DELAY_MS) return false;
-  const expectMergeBox = settings.showMergeBoxBelowDescription;
-  const expectForm = settings.commentBoxAtTop && settings.reverseTimeline;
-  const mergeBoxGone = expectMergeBox && seenOnPage.mergeBox && !findMergeBox();
-  const formGone = expectForm && seenOnPage.commentForm && !findCommentForm();
-  if (!mergeBoxGone && !formGone) return false;
-  return reloadOncePerKey();
+  for (const feature of FEATURES) {
+    if (!feature.recovery?.expectedWhen(settings)) continue;
+    if (seenOnPage.get(feature.name) && !feature.recovery.isPresent()) {
+      return reloadOncePerKey();
+    }
+  }
+  return false;
 }
 
 async function runFeature(name, fn) {
@@ -216,6 +262,87 @@ function ensureRetriesAndObserver() {
   if (initialRetryTimeouts.length === 0) scheduleInitialPasses();
 }
 
+function teardownOnNonPrPage() {
+  resetAllFeatures();
+  stopGlobalObserver();
+  // Card only — the providers come from the static feature registry and
+  // must survive tab switches, or the card could never reappear.
+  clearStatusCard();
+  document.documentElement.removeAttribute("data-gqol-active");
+}
+
+/**
+ * Right after a navigation, wait for GitHub's restore reconciliation to
+ * fall quiet before touching the DOM; applying mid-swap is what unmounts
+ * the TimelineActions partial. Disturbed probes defer this pass — the
+ * ladder/observer retries as soon as the DOM settles.
+ */
+async function domUnsettled() {
+  return (
+    msSinceNavigation() < SETTLE_PROBE_GRACE_MS && !(await domSettled())
+  );
+}
+
+async function applyFeatures(settings) {
+  let anyApplied = false;
+  for (const feature of FEATURES) {
+    const done = await runFeature(feature.name, () => feature.apply(settings));
+    anyApplied ||= Boolean(done);
+  }
+  return anyApplied;
+}
+
+/**
+ * Once everything is applied and stable: stop burning the initial retry
+ * schedule, but keep the global observer alive for the linger window.
+ * Right after a navigation the first pass often settles against a cached
+ * DOM that GitHub is about to replace with a fresh render; only the
+ * observer catches that swap — the retries are gone and onNavigation
+ * no-ops because the page key has not changed.
+ */
+function settlePassLifecycle() {
+  cancelInitialRetries();
+  ensureGlobalObserver();
+  if (globalMutationObserver) {
+    observerSettledAt ??= Date.now();
+    if (Date.now() - observerSettledAt > OBSERVER_SETTLE_LINGER_MS) {
+      stopGlobalObserver();
+    }
+  }
+}
+
+async function runApplyPass() {
+  if (!isPullRequestPage()) {
+    teardownOnNonPrPage();
+    return false;
+  }
+
+  document.documentElement.setAttribute("data-gqol-active", "1");
+  resetDomCache();
+  const settings = await getCachedSettings();
+
+  if (await domUnsettled()) {
+    ensureRetriesAndObserver();
+    return false;
+  }
+
+  updateSeenElements(settings);
+  if (maybeRecoverCorruptedPage(settings)) return false;
+
+  nudgeDescription();
+  renderStatus(settings);
+
+  const anyApplied = await applyFeatures(settings);
+  if (needsWork(settings)) {
+    ensureRetriesAndObserver();
+  } else {
+    settlePassLifecycle();
+  }
+  renderStatus(settings);
+
+  return anyApplied;
+}
+
 async function applyAll() {
   if (isApplying) {
     // A pass is in flight — typically reverse-timeline awaiting hydration,
@@ -227,61 +354,7 @@ async function applyAll() {
   }
   isApplying = true;
   try {
-    if (!isPullRequestPage()) {
-      resetAllFeatures();
-      stopGlobalObserver();
-      clearStatus();
-      document.documentElement.removeAttribute("data-gqol-active");
-      return false;
-    }
-
-    document.documentElement.setAttribute("data-gqol-active", "1");
-    resetDomCache();
-    const settings = await getCachedSettings();
-
-    // Right after a navigation, wait for GitHub's restore reconciliation
-    // to fall quiet before touching the DOM; applying mid-swap is what
-    // unmounts the TimelineActions partial. Disturbed probes defer this
-    // pass — the ladder/observer retries as soon as the DOM settles.
-    if (msSinceNavigation() < SETTLE_PROBE_GRACE_MS && !(await domSettled())) {
-      ensureRetriesAndObserver();
-      return false;
-    }
-
-    seenOnPage.mergeBox ||= Boolean(findMergeBox());
-    seenOnPage.commentForm ||= Boolean(findCommentForm());
-    if (maybeRecoverCorruptedPage(settings)) return false;
-
-    nudgeDescription();
-    updateStatus(settings);
-
-    let anyApplied = false;
-    for (const feature of FEATURES) {
-      const done = await runFeature(feature.name, () => feature.apply(settings));
-      anyApplied ||= Boolean(done);
-    }
-
-    if (needsWork(settings)) {
-      ensureRetriesAndObserver();
-    } else {
-      // Everything is applied and stable: stop burning the initial retry
-      // schedule, but keep the global observer alive for the linger window.
-      // Right after a navigation the first pass often settles against a
-      // cached DOM that GitHub is about to replace with a fresh render;
-      // only the observer catches that swap — the retries are gone and
-      // onNavigation no-ops because the page key has not changed.
-      cancelInitialRetries();
-      ensureGlobalObserver();
-      if (globalMutationObserver) {
-        observerSettledAt ??= Date.now();
-        if (Date.now() - observerSettledAt > OBSERVER_SETTLE_LINGER_MS) {
-          stopGlobalObserver();
-        }
-      }
-    }
-    updateStatus(settings);
-
-    return anyApplied;
+    return await runApplyPass();
   } finally {
     isApplying = false;
     if (rerunAfterPass) {
@@ -322,7 +395,7 @@ export function onNavigation(event) {
   if (!event?.persisted && pageKey() === lastUrl) return;
   lastUrl = pageKey();
   markNavigationAt();
-  seenOnPage = { mergeBox: false, commentForm: false };
+  seenOnPage = new Map();
   resetNudgeTimer();
   resetDomCache();
   resetAllFeatures();
@@ -332,6 +405,9 @@ export function onNavigation(event) {
 
 export function init() {
   registerBus({ applyNow: applyAll, requestRevalidate: scheduleRevalidate });
+  for (const feature of FEATURES) {
+    if (feature.status) setProgressProvider(feature.status);
+  }
   window.addEventListener("pageshow", onNavigation);
   lastUrl = pageKey();
   markNavigationAt();

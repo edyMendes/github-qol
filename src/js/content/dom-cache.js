@@ -8,7 +8,10 @@
  * storage changes).
  */
 
-import { TIMELINE_ITEM_SELECTOR } from "./selectors.js";
+import {
+  MARKDOWN_BODY_CLASSES,
+  TIMELINE_ITEM_SELECTOR,
+} from "../lib/selectors.js";
 
 const TIMELINE_PARTIAL_SELECTOR =
   'rails-partial[data-partial-name="pullRequestsConversationsRoute.Timeline"]';
@@ -27,6 +30,15 @@ export function resetDomCache() {
   domCache = null;
 }
 
+function getDomCache() {
+  // Eager fields only; expensive lookups (timeline items, container) are
+  // computed lazily on first use — many passes touch just the merge box
+  // or comment form and must not pay for full-subtree timeline scans.
+  if (domCache) return domCache;
+  domCache = { discussionRoot: getDiscussionRootUncached() };
+  return domCache;
+}
+
 /** First matching element for the selectors, else document.body. */
 function firstOf(...selectors) {
   for (const selector of selectors) {
@@ -36,20 +48,14 @@ function firstOf(...selectors) {
   return document.body;
 }
 
-function getDomCache() {
-  if (domCache) return domCache;
-
+function getDiscussionRootUncached() {
   // Discussion reads prefer the legacy root, timeline reads the React
   // partial — both fall through to the other, then the whole document.
-  const discussionRoot = firstOf(DISCUSSION_SELECTOR, TIMELINE_PARTIAL_SELECTOR);
-  const timelineRoot = firstOf(TIMELINE_PARTIAL_SELECTOR, DISCUSSION_SELECTOR);
+  return firstOf(DISCUSSION_SELECTOR, TIMELINE_PARTIAL_SELECTOR);
+}
 
-  domCache = {
-    discussionRoot,
-    timelineItems: [...timelineRoot.querySelectorAll(TIMELINE_ITEM_SELECTOR)],
-    timelineContainer: findTimelineContainerUncached(),
-  };
-  return domCache;
+function getTimelineRootUncached() {
+  return firstOf(TIMELINE_PARTIAL_SELECTOR, DISCUSSION_SELECTOR);
 }
 
 function getDiscussionRoot() {
@@ -83,11 +89,21 @@ function findTimelineContainerUncached() {
 }
 
 export function findTimelineContainer() {
-  return getDomCache().timelineContainer;
+  const cache = getDomCache();
+  if (cache.timelineContainer === undefined) {
+    cache.timelineContainer = findTimelineContainerUncached();
+  }
+  return cache.timelineContainer;
 }
 
 export function getTimelineItems() {
-  return getDomCache().timelineItems;
+  const cache = getDomCache();
+  if (cache.timelineItems === undefined) {
+    cache.timelineItems = [
+      ...getTimelineRootUncached().querySelectorAll(TIMELINE_ITEM_SELECTOR),
+    ];
+  }
+  return cache.timelineItems;
 }
 
 export function findFirstTimelineItemChild(container) {
@@ -119,7 +135,7 @@ function findDescElementIn(root) {
 function computeDescriptionElement(cache) {
   // Discussion root first; else the first timeline item (the PR body item —
   // falling back to the item itself); else anywhere in the document.
-  const firstItem = cache.timelineItems[0];
+  const firstItem = getTimelineItems()[0];
   const el =
     findDescElementIn(cache.discussionRoot) ??
     (firstItem
@@ -136,13 +152,20 @@ export function getDescriptionBody() {
   return cache.descriptionBody;
 }
 
+// Cascade in priority order — NOT one comma selector: querySelector returns
+// document order, not selector priority, so each root/class pair must be
+// probed in sequence to preserve the fallback semantics.
 function findBodyIn(root) {
-  return (
-    root.querySelector(`${PR_DESCRIPTION_TESTID_SELECTOR} .markdown-body`) ??
-    root.querySelector(`${PR_DESCRIPTION_TESTID_SELECTOR} .js-comment-body`) ??
-    root.querySelector(`${PR_DESCRIPTION_ID_SELECTOR} .markdown-body`) ??
-    root.querySelector(`${PR_DESCRIPTION_ID_SELECTOR} .js-comment-body`)
-  );
+  for (const descSelector of [
+    PR_DESCRIPTION_TESTID_SELECTOR,
+    PR_DESCRIPTION_ID_SELECTOR,
+  ]) {
+    for (const bodyClass of MARKDOWN_BODY_CLASSES) {
+      const body = root.querySelector(`${descSelector} ${bodyClass}`);
+      if (body) return body;
+    }
+  }
+  return null;
 }
 
 function computeDescriptionBody() {

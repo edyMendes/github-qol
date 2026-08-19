@@ -7,8 +7,9 @@
  * header / floating outline toggle own the top-right corner, so anything
  * fixed-positioned there either collides visually or loses clicks.
  *
- * Pure factories: no dependency on content-script globals so they can be
- * unit-tested directly.
+ * Pure factories and state helpers: they only touch the document through
+ * the elements they are given, so they unit-test without any
+ * content-script module state (the feature owns DOM lookups).
  */
 
 import { chevronDownIcon, chevronUpIcon, filterLeftIcon } from "./icons.js";
@@ -65,10 +66,6 @@ export function setSortDirection(button, newestFirst) {
         : chevronUpIcon("gqol-sort-button__icon")) +
       filterLeftIcon("gqol-sort-button__filter");
   }
-}
-
-export function getSortButton() {
-  return document.getElementById(SORT_BUTTON_ID);
 }
 
 export function createSortRow(button) {

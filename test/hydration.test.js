@@ -1,7 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   nudgeDescription,
+  registerProtectedRegion,
   resetNudgeTimer,
+  schedulePostChangeRetries,
+  cancelPostChangeRetries,
+  timelineHasLoadingContent,
+  timelineNeedsHydration,
 } from "../src/js/content/hydration.js";
 import { resetDomCache } from "../src/js/content/dom-cache.js";
 
@@ -82,5 +87,111 @@ describe("nudgeDescription", () => {
     const count = countClones(() => nudgeDescription());
 
     expect(count).toBe(0);
+  });
+});
+
+describe("timeline loading predicates", () => {
+  function buildTimeline({ skeleton = false, deferred = false } = {}) {
+    document.body.innerHTML = "";
+    const container = document.createElement("div");
+    container.className = "js-discussion";
+    for (let i = 0; i < 2; i++) {
+      const item = document.createElement("div");
+      item.className = "js-timeline-item";
+      container.appendChild(item);
+    }
+    if (skeleton) {
+      const host = document.createElement("div");
+      host.className = "js-updatable-content";
+      host.appendChild(document.createElement("div")).className = "Skeleton";
+      container.appendChild(host);
+    }
+    if (deferred) {
+      container.appendChild(document.createElement("batch-deferred-content"));
+    }
+    document.body.appendChild(container);
+    resetDomCache();
+    return container;
+  }
+
+  it("reports loading content when skeletons exist outside the description", () => {
+    const container = buildTimeline({ skeleton: true });
+    expect(timelineHasLoadingContent(container)).toBe(true);
+  });
+
+  it("reports no loading content on a quiet timeline", () => {
+    const container = buildTimeline();
+    expect(timelineHasLoadingContent(container)).toBe(false);
+    expect(timelineNeedsHydration(container)).toBe(false);
+  });
+
+  it("reports hydration needed for deferred content outside the description", () => {
+    const container = buildTimeline({ deferred: true });
+    expect(timelineNeedsHydration(container)).toBe(true);
+  });
+
+  it("accepts a precomputed skeleton list with identical results", () => {
+    const container = buildTimeline({ skeleton: true });
+    const skeletons = container.querySelectorAll(
+      "batch-deferred-content .Skeleton, .commit-build-statuses .Skeleton, .js-updatable-content .Skeleton",
+    );
+    expect(skeletons.length).toBeGreaterThan(0);
+    expect(timelineHasLoadingContent(container, skeletons)).toBe(
+      timelineHasLoadingContent(container),
+    );
+  });
+
+  it("accepts a precomputed loading verdict in timelineNeedsHydration", () => {
+    const container = buildTimeline({ deferred: true });
+    expect(timelineNeedsHydration(container, false)).toBe(true);
+    expect(timelineNeedsHydration(container, true)).toBe(true);
+  });
+
+  it("returns false for a missing container", () => {
+    expect(timelineNeedsHydration(null)).toBe(false);
+  });
+});
+
+describe("protected regions", () => {
+  function deferred(parent) {
+    const el = document.createElement("batch-deferred-content");
+    parent.appendChild(el);
+    return el;
+  }
+
+  function runRetriesOnce() {
+    vi.useFakeTimers();
+    try {
+      schedulePostChangeRetries(document.body);
+      vi.advanceTimersByTime(0);
+    } finally {
+      cancelPostChangeRetries();
+      vi.useRealTimers();
+    }
+  }
+
+  it("does not clone deferred content inside a registered region", () => {
+    document.body.innerHTML = "";
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+
+    const box = document.createElement("div");
+    box.setAttribute("data-gqol-comment-box-moved", "1");
+    container.appendChild(box);
+    const protectedEl = deferred(box);
+
+    const plain = deferred(container);
+
+    registerProtectedRegion(() =>
+      document.querySelector("[data-gqol-comment-box-moved='1']"),
+    );
+    runRetriesOnce();
+
+    expect(protectedEl.isConnected).toBe(true);
+    // The unprotected element WAS re-created (cloned); the protected one
+    // must be the exact same node.
+    expect(document.querySelector("batch-deferred-content")).toBeDefined();
+    expect(box.contains(protectedEl)).toBe(true);
+    expect(container.contains(plain)).toBe(false);
   });
 });

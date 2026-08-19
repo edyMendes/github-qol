@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   createSortButton,
   createSortRow,
-  getSortButton,
   isSortRowPlaced,
   placeSortRow,
   setSortDirection,
@@ -242,14 +241,5 @@ describe("setSortDirection", () => {
 
   it("is a no-op for a missing button", () => {
     expect(() => setSortDirection(null, true)).not.toThrow();
-  });
-});
-
-describe("getSortButton", () => {
-  it("finds the button once attached to the document", () => {
-    expect(getSortButton()).toBeNull();
-    const button = createSortButton();
-    document.body.appendChild(button);
-    expect(getSortButton()).toBe(button);
   });
 });

@@ -2,6 +2,8 @@
  * Page-level predicates shared across modules.
  */
 
+import { isConversationRendered } from "./dom-cache.js";
+
 export function isPullRequestPage() {
   // Conversation tab only — not /files, /commits, etc. Switching tabs must
   // tear our changes down and re-apply when the conversation returns.
@@ -35,4 +37,13 @@ const POST_NAV_SWAP_WINDOW_MS = 90000;
 
 export function withinPostNavSwapWindow() {
   return msSinceNavigation() < POST_NAV_SWAP_WINDOW_MS;
+}
+
+/**
+ * Shared "absent element → pending" policy for features whose target
+ * element has not rendered: pending only while the post-navigation swap
+ * may still be in flight and the conversation itself is rendered.
+ */
+export function isPendingPostNavSwap() {
+  return withinPostNavSwapWindow() && isConversationRendered();
 }

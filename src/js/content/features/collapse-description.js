@@ -11,6 +11,7 @@ import {
 import { isDescriptionBodyLoading, isDescriptionLoading, isTallBody } from "../description.js";
 import { nudgeDescription } from "../hydration.js";
 import { requestRevalidate } from "../bus.js";
+import { MARKDOWN_BODY_SELECTOR } from "../../lib/selectors.js";
 
 const DESC_COLLAPSED_CLASS = "gqol-desc-collapsed";
 const DESC_WRAP_CLASS = "gqol-desc-wrap";
@@ -49,9 +50,8 @@ function alignFooterText(block, body) {
 }
 
 function scrollDescriptionIntoView(target) {
-  const el = target ?? getDescriptionElement() ?? getDescriptionBody();
-  if (el?.isConnected) {
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (target?.isConnected) {
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 }
 
@@ -157,7 +157,7 @@ function restoreBodyElement(body) {
 function unwrapCollapsedContainer(container, fallbackToFirstChild) {
   const wrapped = container.querySelector(`.${DESC_WRAP_CLASS}`)?.firstElementChild;
   const body =
-    container.querySelector(".markdown-body, .js-comment-body") ??
+    container.querySelector(MARKDOWN_BODY_SELECTOR) ??
     (fallbackToFirstChild ? container.firstElementChild : wrapped);
   if (body) {
     restoreBodyElement(body);
@@ -223,7 +223,7 @@ function needsWorkCollapseDescription(settings) {
   const descEl = getDescriptionElement();
   const body = getDescriptionBody();
   if (!descEl && !body) return false;
-  if (!body) return Boolean(descEl && isDescriptionLoading(descEl));
+  if (!body) return isDescriptionLoading(descEl);
   if (isDescriptionBodyLoading(body)) return true;
   // Cheap closest() before the reflow-forcing height measurement.
   return !body.closest(`.${DESC_BLOCK_CLASS}`) && isTallBody(body);

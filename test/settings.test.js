@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   STORAGE_KEY,
+  SETTING_DEFINITIONS,
   DEFAULT_SETTINGS,
   normalizeSettings,
   getSettings,
@@ -10,6 +11,34 @@ import {
 
 beforeEach(() => {
   globalThis.__resetChromeStorage();
+});
+
+describe("SETTING_DEFINITIONS", () => {
+  it("is the single source DEFAULT_SETTINGS is derived from", () => {
+    expect(DEFAULT_SETTINGS).toEqual(
+      Object.fromEntries(
+        SETTING_DEFINITIONS.map((definition) => [
+          definition.key,
+          definition.default,
+        ]),
+      ),
+    );
+  });
+
+  it("covers every default key exactly once", () => {
+    const keys = SETTING_DEFINITIONS.map((definition) => definition.key);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect([...keys].sort()).toEqual(Object.keys(DEFAULT_SETTINGS).sort());
+  });
+
+  it("marks which settings the popup renders controls for", () => {
+    const popupKeys = SETTING_DEFINITIONS.filter((d) => d.popupControlled);
+    expect(popupKeys.map((d) => d.key)).toEqual([
+      "collapsePrDescription",
+      "showMergeBoxBelowDescription",
+      "commentBoxAtTop",
+    ]);
+  });
 });
 
 describe("normalizeSettings", () => {

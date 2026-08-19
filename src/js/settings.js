@@ -1,11 +1,24 @@
 export const STORAGE_KEY = "githubQolSettings";
 
-export const DEFAULT_SETTINGS = {
-  reverseTimeline: true,
-  collapsePrDescription: true,
-  showMergeBoxBelowDescription: true,
-  commentBoxAtTop: true,
-};
+/**
+ * The single source of truth for every setting: key, default, and
+ * whether the popup renders a control for it (reverseTimeline is
+ * toggled by the in-page sort button instead). DEFAULT_SETTINGS and
+ * the popup's checkboxes both derive from this list.
+ */
+export const SETTING_DEFINITIONS = [
+  { key: "reverseTimeline", default: true, popupControlled: false },
+  { key: "collapsePrDescription", default: true, popupControlled: true },
+  { key: "showMergeBoxBelowDescription", default: true, popupControlled: true },
+  { key: "commentBoxAtTop", default: true, popupControlled: true },
+];
+
+export const DEFAULT_SETTINGS = Object.fromEntries(
+  SETTING_DEFINITIONS.map(({ key, default: defaultValue }) => [
+    key,
+    defaultValue,
+  ]),
+);
 
 export function normalizeSettings(raw = {}) {
   const normalized = {};

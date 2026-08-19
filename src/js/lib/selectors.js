@@ -1,5 +1,5 @@
 /**
- * Selectors and attributes shared by more than one feature module.
+ * Shared selectors and marker attributes used by more than one module.
  * Feature-private constants stay inside their feature.
  */
 
@@ -17,3 +17,17 @@ export const COMMENT_BOX_MOVED_ATTR = "data-gqol-comment-box-moved";
 // Set on the timeline container while its items are newest-first; read by
 // the reverse feature, its mutation observer and the status module.
 export const REVERSED_ATTR = "data-gqol-reverse";
+
+// Saved original item order on the container, for exact restore.
+export const TIMELINE_GIDS_ATTR = "data-gqol-timeline-gids";
+
+// Rendered PR-description body elements, in preference order.
+export const MARKDOWN_BODY_CLASSES = [".markdown-body", ".js-comment-body"];
+export const MARKDOWN_BODY_SELECTOR = MARKDOWN_BODY_CLASSES.join(", ");
+
+// GitHub's placeholder blocks for content still being fetched.
+export const SKELETON_CLASS = ".Skeleton";
+export const SKELETON_SELECTOR =
+  `batch-deferred-content ${SKELETON_CLASS}, ` +
+  `.commit-build-statuses ${SKELETON_CLASS}, ` +
+  `.js-updatable-content ${SKELETON_CLASS}`;

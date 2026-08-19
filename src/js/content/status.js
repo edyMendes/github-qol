@@ -1,108 +1,45 @@
 /**
- * Timeline status UI: a floating "sorting…" progress card shown while the
- * reversed timeline is still hydrating. Also owns the phase state
- * ("hydrating" / "reversing") that the reverse-timeline feature drives.
+ * Timeline status UI: a floating progress card. A dumb renderer — the
+ * feature that owns the work (reverse-timeline) registers one progress
+ * provider (settings → {label, progress, indeterminate} | null) and the
+ * renderer draws whatever it currently returns. No polling interval:
+ * the feature's hydration tick and the apply lifecycle drive re-renders.
  */
 
-import { getCachedSettings } from "./settings-cache.js";
-import { findTimelineContainer, getTimelineItems } from "./dom-cache.js";
-import { isPullRequestPage } from "./page.js";
-import {
-  TIMELINE_HYDRATION_TIMEOUT_MS,
-  timelineHasLoadingContent,
-  timelineNeedsHydration,
-} from "./hydration.js";
-import { REVERSED_ATTR } from "./selectors.js";
-
 const TIMELINE_STATUS_ID = "gqol-timeline-status";
-const STATUS_REFRESH_MS = 200;
 
-let statusRefreshInterval = null;
-let timelinePhase = null; // null | "hydrating" | "reversing"
-let hydrationStartedAt = 0;
-// Last rendered state: the 200ms refresh skips identical DOM writes, which
-// would otherwise be pure observer noise and style recalc.
+let progressProvider = null;
+let statusRefs = null; // { el, labelEl, barEl, trackEl }
+// Last rendered state: repeated renders with identical output skip the
+// DOM writes, which would otherwise be pure observer noise and recalc.
 let lastRenderKey = null;
 
-export function setTimelinePhase(phase) {
-  timelinePhase = phase;
+/**
+ * Register the (single) progress provider. Pass null to unregister.
+ * Providers must be pure: settings in, descriptor-or-null out.
+ */
+export function setProgressProvider(provider) {
+  progressProvider = provider;
 }
 
-export function setHydrationStartedAt(timestamp) {
-  hydrationStartedAt = timestamp;
-}
-
-function getStatusDescriptor(settings) {
-  if (!settings.reverseTimeline || !isPullRequestPage()) return null;
-
-  const container = findTimelineContainer();
-  const items = getTimelineItems();
-
-  if (container?.getAttribute(REVERSED_ATTR) === "1") return null;
-
-  if (timelinePhase === "reversing") {
-    return {
-      label: "Sorting timeline newest first…",
-      progress: 92,
-      indeterminate: false,
-    };
-  }
-
-  if (timelinePhase === "hydrating" || (container && timelineHasLoadingContent(container))) {
-    const elapsed = hydrationStartedAt ? Date.now() - hydrationStartedAt : 0;
-    const ratio = Math.min(1, elapsed / TIMELINE_HYDRATION_TIMEOUT_MS);
-    return {
-      label: "Loading timeline activity…",
-      progress: 34 + 48 * ratio,
-      indeterminate: ratio < 0.08,
-    };
-  }
-
-  if (items.length < 2) {
-    return {
-      label: "Waiting for timeline…",
-      progress: items.length === 0 ? 14 : 26,
-      indeterminate: true,
-    };
-  }
-
-  if (container && timelineNeedsHydration(container)) {
-    return {
-      label: "Loading deferred timeline items…",
-      progress: 38,
-      indeterminate: true,
-    };
-  }
-
-  return { label: "Preparing timeline…", progress: 84, indeterminate: false };
-}
-
-export function clearStatus() {
-  timelinePhase = null;
-  hydrationStartedAt = 0;
+/** Remove the card but keep the provider registered. */
+export function clearStatusCard() {
   lastRenderKey = null;
-  if (statusRefreshInterval) {
-    clearInterval(statusRefreshInterval);
-    statusRefreshInterval = null;
-  }
+  // Id lookup, not just the cached refs: the card may have been removed
+  // behind our back (e.g. a test resetting the body).
   document.getElementById(TIMELINE_STATUS_ID)?.remove();
+  statusRefs = null;
 }
 
-export function updateStatus(settings) {
-  const descriptor = getStatusDescriptor(settings);
-  if (!descriptor) {
-    clearStatus();
-    return;
-  }
+function ensureStatusCard() {
+  if (statusRefs?.el.isConnected) return statusRefs;
 
-  let statusEl = document.getElementById(TIMELINE_STATUS_ID);
-  if (!statusEl) {
-    statusEl = document.createElement("div");
-    statusEl.id = TIMELINE_STATUS_ID;
-    statusEl.className = "gqol-timeline-status";
-    statusEl.setAttribute("role", "status");
-    statusEl.setAttribute("aria-live", "polite");
-    statusEl.innerHTML = `
+  const el = document.createElement("div");
+  el.id = TIMELINE_STATUS_ID;
+  el.className = "gqol-timeline-status";
+  el.setAttribute("role", "status");
+  el.setAttribute("aria-live", "polite");
+  el.innerHTML = `
     <div class="gqol-timeline-status__inner">
       <p class="gqol-timeline-status__label"></p>
       <div class="gqol-timeline-status__track" aria-hidden="true">
@@ -110,32 +47,42 @@ export function updateStatus(settings) {
       </div>
     </div>
   `;
-    document.body.appendChild(statusEl);
+  document.body.appendChild(el);
+
+  statusRefs = {
+    el,
+    labelEl: el.querySelector(".gqol-timeline-status__label"),
+    barEl: el.querySelector(".gqol-timeline-status__bar"),
+    trackEl: el.querySelector(".gqol-timeline-status__track"),
+  };
+  lastRenderKey = null;
+  return statusRefs;
+}
+
+/** Render the provider's current descriptor (or remove the card). */
+export function renderStatus(settings) {
+  const descriptor = progressProvider?.(settings);
+  if (!descriptor) {
+    clearStatusCard();
+    return;
   }
 
-  const labelEl = statusEl.querySelector(".gqol-timeline-status__label");
-  const barEl = statusEl.querySelector(".gqol-timeline-status__bar");
-  const trackEl = statusEl.querySelector(".gqol-timeline-status__track");
-
-  if (!labelEl || !barEl || !trackEl) return;
-
+  const { labelEl, barEl, trackEl } = ensureStatusCard();
   const width = `${Math.round(Math.min(98, Math.max(8, descriptor.progress)))}%`;
   const renderKey = `${descriptor.label}|${width}|${descriptor.indeterminate}`;
-  if (renderKey !== lastRenderKey) {
-    labelEl.textContent = descriptor.label;
-    barEl.style.width = width;
-    trackEl.classList.toggle(
-      "gqol-timeline-status__track--indeterminate",
-      descriptor.indeterminate,
-    );
-    lastRenderKey = renderKey;
-  }
+  if (renderKey === lastRenderKey) return;
 
-  if (!statusRefreshInterval) {
-    statusRefreshInterval = setInterval(() => {
-      getCachedSettings()
-        .then((current) => updateStatus(current))
-        .catch(() => {});
-    }, STATUS_REFRESH_MS);
-  }
+  labelEl.textContent = descriptor.label;
+  barEl.style.width = width;
+  trackEl.classList.toggle(
+    "gqol-timeline-status__track--indeterminate",
+    descriptor.indeterminate,
+  );
+  lastRenderKey = renderKey;
+}
+
+/** Full teardown: forget the provider and remove the card. */
+export function resetStatus() {
+  progressProvider = null;
+  clearStatusCard();
 }

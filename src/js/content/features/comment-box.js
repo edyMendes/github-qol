@@ -24,15 +24,15 @@ import {
   findFirstTimelineItemChild,
   findTimelineContainer,
   getTimelineItems,
-  isConversationRendered,
   resetDomCache,
 } from "../dom-cache.js";
-import { withinPostNavSwapWindow } from "../page.js";
+import { registerProtectedRegion } from "../hydration.js";
+import { isPendingPostNavSwap } from "../page.js";
 import {
   COMMENT_BOX_MOVED_ATTR,
   TIMELINE_FLOW_STOP_SELECTOR,
   TIMELINE_ITEM_SELECTOR,
-} from "../selectors.js";
+} from "../../lib/selectors.js";
 
 const COMMENT_BOX_AT_TOP_CLASS = "gqol-comment-box-at-top";
 const COMMENT_FOOTER_PATTERN =
@@ -48,6 +48,13 @@ const MOVED_MARKERS_SELECTOR = `[${COMMENT_BOX_MOVED_ATTR}="1"], [${COMMENT_FOOT
 
 const commentBoxAnchors = new WeakMap();
 const commentFooterAnchors = new WeakMap();
+
+// The relocated box's deferred/React-managed content must never be
+// re-cloned by hydration — a clone drops React state and leaves an empty
+// box. Declared here so hydration stays free of feature knowledge.
+registerProtectedRegion(() =>
+  document.querySelector(`[${COMMENT_BOX_MOVED_ATTR}="1"]`),
+);
 
 function isCommentBoxPlaced(wrapper, container) {
   return isPlacedBeforeTimelineItems(wrapper, container, TIMELINE_ITEM_SELECTOR);
@@ -90,8 +97,8 @@ function extractCommentFooters(wrapper, container) {
   let moved = false;
   const footers = [...findCommentFooters(wrapper)].sort(
     (a, b) =>
-      Number(Boolean(GUIDELINES_PATTERN.test(b.textContent ?? ""))) -
-      Number(Boolean(GUIDELINES_PATTERN.test(a.textContent ?? ""))),
+      Number(GUIDELINES_PATTERN.test(b.textContent)) -
+      Number(GUIDELINES_PATTERN.test(a.textContent)),
   );
   for (const footer of footers) {
     anchorBefore(commentFooterAnchors, footer, footer, "gqol-comment-footer-anchor");
@@ -159,7 +166,7 @@ function needsWorkCommentBox(settings) {
   if (!form) {
     // Absent form: pending only while the post-navigation swap may still
     // be in flight and the conversation itself is rendered.
-    return withinPostNavSwapWindow() && isConversationRendered();
+    return isPendingPostNavSwap();
   }
   if (!container) return false;
   return Boolean(
@@ -178,4 +185,12 @@ export default {
     ),
   needsWork: needsWorkCommentBox,
   reset: restoreAllCommentBoxes,
+  recovery: {
+    // The box only moves in newest-first mode; a seen comment form that
+    // vanishes with the DOM settled means GitHub dropped our moved
+    // subtree — the orchestrator reloads once.
+    expectedWhen: (settings) =>
+      settings.commentBoxAtTop && settings.reverseTimeline,
+    isPresent: () => Boolean(findCommentForm()),
+  },
 };

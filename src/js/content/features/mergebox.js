@@ -5,6 +5,7 @@
 
 import {
   findMergeBoxUnit,
+  findMovedCommentBox,
   findTimelineItemFor,
 } from "../../lib/placement.js";
 import { anchorBefore, restoreAtAnchor } from "../../lib/anchor.js";
@@ -13,11 +14,10 @@ import {
   findFirstTimelineItemChild,
   findMergeBox,
   findTimelineContainer,
-  isConversationRendered,
   resetDomCache,
 } from "../dom-cache.js";
-import { withinPostNavSwapWindow } from "../page.js";
-import { COMMENT_BOX_MOVED_ATTR, TIMELINE_ITEM_SELECTOR } from "../selectors.js";
+import { isPendingPostNavSwap } from "../page.js";
+import { TIMELINE_ITEM_SELECTOR } from "../../lib/selectors.js";
 
 const MERGEBOX_BELOW_DESC_CLASS = "gqol-mergebox-below-desc";
 const MERGEBOX_MOVED_ATTR = "data-gqol-mergebox-moved";
@@ -187,12 +187,11 @@ function applyMergeBoxBelowDescription(enabled) {
     // Insert before the container's first timeline item — or before the
     // already-placed comment box when it exists, so re-runs always settle
     // as [hint][merge box][comment box][items]. Footer texts stay at the end.
-    const commentWrapper = [...container.children].find((child) =>
-      child.hasAttribute?.(COMMENT_BOX_MOVED_ATTR),
-    );
     container.insertBefore(
       row,
-      commentWrapper ?? findFirstTimelineItemChild(container) ?? null,
+      findMovedCommentBox(container) ??
+        findFirstTimelineItemChild(container) ??
+        null,
     );
     resetDomCache();
   }
@@ -207,9 +206,9 @@ function needsWorkMergeBox(settings) {
   if (!settings.showMergeBoxBelowDescription) return false;
   const mergeBox = findMergeBox();
   if (!mergeBox) {
-    // Absent box: pending only while the post-navigation swap may still be
-    // in flight and the conversation itself is rendered.
-    return withinPostNavSwapWindow() && isConversationRendered();
+    // Absent box: pending only while the post-navigation swap may still
+    // be in flight and the conversation itself is rendered.
+    return isPendingPostNavSwap();
   }
   return !isMergeBoxPlaced(mergeBox);
 }
@@ -220,4 +219,10 @@ export default {
     applyMergeBoxBelowDescription(settings.showMergeBoxBelowDescription),
   needsWork: needsWorkMergeBox,
   reset: restoreAllMergeBoxes,
+  recovery: {
+    // A seen merge box that vanishes with the DOM settled means GitHub
+    // dropped our moved subtree — the orchestrator reloads once.
+    expectedWhen: (settings) => settings.showMergeBoxBelowDescription,
+    isPresent: () => Boolean(findMergeBox()),
+  },
 };

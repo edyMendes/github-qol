@@ -278,4 +278,70 @@ describe("orchestrator reapply lifecycle after back-navigation", () => {
     expect(reload).toHaveBeenCalledTimes(1);
     expect(sessionStorage.getItem("gqol-reloaded:/owner/repo/pull/42")).toBe("1");
   });
+
+  it("reloads when the seen comment form vanishes with the DOM settled", async () => {
+    const reload = vi.fn();
+    setReloadForTests(reload);
+
+    history.pushState(null, "", PR_URL);
+    buildConversationDom();
+    init();
+    await vi.advanceTimersByTimeAsync(PROBE_MS);
+    expect(document.querySelector(".gqol-comment-box-at-top")).not.toBeNull();
+
+    // The whole comment form wrapper disappears (React unmount).
+    document.querySelector("[data-gqol-comment-box-moved='1']").remove();
+
+    await vi.advanceTimersByTimeAsync(50000);
+
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the status provider registered across non-PR teardowns", async () => {
+    history.pushState(null, "", PR_URL);
+    buildConversationDom({ skeleton: true });
+    init();
+    await vi.advanceTimersByTimeAsync(PROBE_MS);
+    expect(document.getElementById("gqol-timeline-status")).not.toBeNull();
+
+    // Let the hydration hold time out so the in-flight pass completes.
+    await vi.advanceTimersByTimeAsync(13000);
+
+    // Tab switch away: the non-PR teardown clears the card…
+    history.pushState(null, "", COMMITS_URL);
+    onNavigation();
+    await vi.advanceTimersByTimeAsync(PROBE_MS);
+    expect(document.getElementById("gqol-timeline-status")).toBeNull();
+
+    // …and back: the progress card must still be able to appear.
+    history.pushState(null, "", PR_URL);
+    buildConversationDom({ skeleton: true });
+    onNavigation();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(document.getElementById("gqol-timeline-status")).not.toBeNull();
+  });
+
+  it("prunes old recovery markers so sessionStorage stays bounded", async () => {
+    const reload = vi.fn();
+    setReloadForTests(reload);
+
+    // Simulate a long session: many pages already used their one reload.
+    for (let i = 0; i < 30; i++) {
+      sessionStorage.setItem(`gqol-reloaded:/owner/repo/pull/${i}`, "1");
+    }
+
+    history.pushState(null, "", PR_URL);
+    buildConversationDom();
+    init();
+    await vi.advanceTimersByTimeAsync(PROBE_MS);
+    document.querySelector(".gqol-mergebox-timeline-row").remove();
+    await vi.advanceTimersByTimeAsync(50000);
+
+    expect(reload).toHaveBeenCalledTimes(1);
+    const keys = Object.keys(sessionStorage).filter((k) =>
+      k.startsWith("gqol-reloaded:"),
+    );
+    expect(keys.length).toBeLessThanOrEqual(20);
+    expect(sessionStorage.getItem("gqol-reloaded:/owner/repo/pull/42")).toBe("1");
+  });
 });
