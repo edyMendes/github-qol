@@ -42,7 +42,6 @@ import { registerBus } from "./bus.js";
 import collapseDescription from "./features/collapse-description.js";
 import sectionOrder from "./features/section-order.js";
 import reverseTimeline from "./features/reverse-timeline.js";
-import sortRow from "./features/sort-row.js";
 
 // Elements the extension itself renders. Mutations whose target lives
 // inside one of these must never trigger revalidation — re-applying
@@ -80,15 +79,8 @@ const RECOVERY_MARKER_PREFIX = "gqol-reloaded:";
 
 // Apply order matters: collapse first (reads the description in place),
 // then the section layout (moves whole sections around the stream), then
-// the reversal (reorders the stream itself), and finally the sort row
-// (anchored above the comment box once it settled — removed in the next
-// task).
-const FEATURES = [
-  collapseDescription,
-  sectionOrder,
-  reverseTimeline,
-  sortRow,
-];
+// the reversal (reorders the stream the sections surround).
+const FEATURES = [collapseDescription, sectionOrder, reverseTimeline];
 
 let globalMutationObserver = null;
 let observerSettledAt = null;
@@ -206,8 +198,7 @@ function needsWork(settings) {
 
 function resetAllFeatures() {
   // Reverse order: the reversal is undone first because it reorders the
-  // container the other features live in; the sort row is independent but
-  // comes off first for the same reason. runFeature executes sync reset
+  // container the other features live in. runFeature executes sync reset
   // fns immediately, so the order holds; runFeature never rejects.
   for (const feature of [...FEATURES].reverse()) {
     runFeature(`${feature.name} reset`, feature.reset);
@@ -229,9 +220,9 @@ function ensureGlobalObserver() {
   if (globalMutationObserver) return;
 
   globalMutationObserver = new MutationObserver((records) => {
-    // Our own UI writes (status card text, sort label) land here too;
-    // re-applying in response would rewrite them again — an endless
-    // self-sustaining loop. Only external (GitHub) mutations revalidate.
+    // Our own UI writes (status card text) land here too; re-applying in
+    // response would rewrite them again — an endless self-sustaining
+    // loop. Only external (GitHub) mutations revalidate.
     if (!hasExternalMutations(records)) return;
     // Rolling linger: stay alive while the page keeps mutating.
     // applyAll's settled branch retires it after true DOM silence.

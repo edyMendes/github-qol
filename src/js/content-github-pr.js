@@ -2,10 +2,9 @@
  * GitHub QoL — content script entry for GitHub PR conversation pages.
  *
  * Features:
+ * - User-configurable section order around the timeline
  * - Reverse PR timeline (newest first)
  * - Collapse long PR descriptions
- * - Merge status box below the PR description
- * - Comment box at the top of the timeline
  *
  * The wiring lives in ./content/: feature modules in ./content/features/,
  * shared DOM access in ./content/dom-cache.js, lifecycle in

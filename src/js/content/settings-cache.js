@@ -1,8 +1,7 @@
 import { DEFAULT_SETTINGS, getSettings } from "../settings.js";
 
 /**
- * Per-page settings cache. Invalidated when the sort button saves a new
- * value or when chrome.storage.onChanged fires.
+ * Per-page settings cache. Invalidated when chrome.storage.onChanged fires.
  */
 
 let cachedSettings = null;
