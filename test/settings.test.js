@@ -3,6 +3,8 @@ import {
   STORAGE_KEY,
   SETTING_DEFINITIONS,
   DEFAULT_SETTINGS,
+  SECTION_IDS,
+  TIMELINE_ORDERS,
   normalizeSettings,
   getSettings,
   saveSettings,
@@ -31,13 +33,22 @@ describe("SETTING_DEFINITIONS", () => {
     expect([...keys].sort()).toEqual(Object.keys(DEFAULT_SETTINGS).sort());
   });
 
-  it("marks which settings the popup renders controls for", () => {
+  it("keeps the popupControlled marking in sync with definitions", () => {
     const popupKeys = SETTING_DEFINITIONS.filter((d) => d.popupControlled);
     expect(popupKeys.map((d) => d.key)).toEqual([
       "collapsePrDescription",
       "showMergeBoxBelowDescription",
       "commentBoxAtTop",
     ]);
+  });
+
+  it("declares enum and sectionOrder values", () => {
+    const timelineOrder = SETTING_DEFINITIONS.find((d) => d.key === "timelineOrder");
+    expect(timelineOrder.type).toBe("enum");
+    expect(timelineOrder.values).toEqual(["newest", "oldest"]);
+    const sectionOrder = SETTING_DEFINITIONS.find((d) => d.key === "sectionOrder");
+    expect(sectionOrder.type).toBe("sectionOrder");
+    expect(sectionOrder.values).toEqual(SECTION_IDS);
   });
 });
 
@@ -60,6 +71,8 @@ describe("normalizeSettings", () => {
       collapsePrDescription: false,
       showMergeBoxBelowDescription: false,
       commentBoxAtTop: false,
+      timelineOrder: "oldest",
+      sectionOrder: ["copilot", "timeline", "mergebox", "commentBox"],
     });
   });
 
@@ -67,6 +80,9 @@ describe("normalizeSettings", () => {
     expect(normalizeSettings({ reverseTimeline: false })).toEqual({
       ...DEFAULT_SETTINGS,
       reverseTimeline: false,
+      timelineOrder: "oldest",
+      sectionOrder: ["copilot", "mergebox", "timeline", "commentBox"],
+      commentBoxAtTop: false,
     });
   });
 
@@ -74,7 +90,77 @@ describe("normalizeSettings", () => {
     expect(normalizeSettings({ reverseTimeline: 0 })).toEqual({
       ...DEFAULT_SETTINGS,
       reverseTimeline: false,
+      timelineOrder: "oldest",
     });
+  });
+});
+
+describe("normalizeSettings: timelineOrder", () => {
+  it("keeps a valid enum value", () => {
+    expect(normalizeSettings({ timelineOrder: "oldest" }).timelineOrder).toBe("oldest");
+  });
+
+  it("falls back to newest for an invalid value", () => {
+    expect(normalizeSettings({ timelineOrder: "sideways" }).timelineOrder).toBe("newest");
+  });
+
+  it("migrates legacy reverseTimeline=false to oldest", () => {
+    expect(normalizeSettings({ reverseTimeline: false }).timelineOrder).toBe("oldest");
+    expect(normalizeSettings({ reverseTimeline: true }).timelineOrder).toBe("newest");
+  });
+});
+
+describe("normalizeSettings: sectionOrder", () => {
+  it("keeps a valid full ordering", () => {
+    const order = ["timeline", "copilot", "commentBox", "mergebox"];
+    expect(normalizeSettings({ sectionOrder: order }).sectionOrder).toEqual(order);
+  });
+
+  it("drops unknown ids, dedupes, and appends missing ids", () => {
+    expect(
+      normalizeSettings({ sectionOrder: ["bogus", "timeline", "timeline", "copilot"] })
+        .sectionOrder,
+    ).toEqual(["timeline", "copilot", "mergebox", "commentBox"]);
+  });
+
+  it("falls back to the default order for non-array input", () => {
+    expect(normalizeSettings({ sectionOrder: "nope" }).sectionOrder).toEqual([
+      "copilot", "mergebox", "commentBox", "timeline",
+    ]);
+  });
+
+  it("migrates showMergeBoxBelowDescription=false by demoting mergebox", () => {
+    expect(normalizeSettings({ showMergeBoxBelowDescription: false }).sectionOrder).toEqual([
+      "copilot", "commentBox", "timeline", "mergebox",
+    ]);
+  });
+
+  it("migrates commentBoxAtTop=false by demoting commentBox", () => {
+    expect(normalizeSettings({ commentBoxAtTop: false }).sectionOrder).toEqual([
+      "copilot", "mergebox", "timeline", "commentBox",
+    ]);
+  });
+
+  it("migrates reverseTimeline=false by demoting commentBox", () => {
+    expect(normalizeSettings({ reverseTimeline: false }).sectionOrder).toEqual([
+      "copilot", "mergebox", "timeline", "commentBox",
+    ]);
+  });
+});
+
+describe("normalizeSettings: legacy mirrors (expand phase)", () => {
+  it("derives legacy booleans from new keys", () => {
+    const s = normalizeSettings({ timelineOrder: "oldest", sectionOrder: ["copilot", "timeline", "mergebox", "commentBox"] });
+    expect(s.reverseTimeline).toBe(false);
+    expect(s.showMergeBoxBelowDescription).toBe(false);
+    expect(s.commentBoxAtTop).toBe(false);
+  });
+
+  it("derives new keys from legacy booleans", () => {
+    const s = normalizeSettings({ reverseTimeline: true, showMergeBoxBelowDescription: false, commentBoxAtTop: true });
+    expect(s.timelineOrder).toBe("newest");
+    expect(s.sectionOrder).toEqual(["copilot", "commentBox", "timeline", "mergebox"]);
+    expect(s.showMergeBoxBelowDescription).toBe(false);
   });
 });
 
@@ -92,6 +178,8 @@ describe("getSettings", () => {
       ...DEFAULT_SETTINGS,
       reverseTimeline: false,
       commentBoxAtTop: false,
+      timelineOrder: "oldest",
+      sectionOrder: ["copilot", "mergebox", "timeline", "commentBox"],
     });
   });
 
@@ -114,6 +202,9 @@ describe("getSettings", () => {
     expect(await getSettings()).toEqual({
       ...DEFAULT_SETTINGS,
       reverseTimeline: false,
+      timelineOrder: "oldest",
+      sectionOrder: ["copilot", "mergebox", "timeline", "commentBox"],
+      commentBoxAtTop: false,
     });
   });
 
