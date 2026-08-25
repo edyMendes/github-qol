@@ -27,6 +27,10 @@
       "32": "public/assets/logo/32.png"
     }
   },
+  "options_ui": {
+    "page": "src/options.html",
+    "open_in_tab": true
+  },
   "background": {
     "service_worker": "src/js/background.min.js",
     "type": "module"

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GitHub QoL — Settings</title>
+    <link rel="stylesheet" href="css/outputTailwind.css" />
+  </head>
+  <body class="min-h-screen bg-zinc-950 font-sans text-zinc-100 antialiased">
+    <div class="mx-auto flex max-w-xl flex-col gap-6 p-6">
+      <header class="space-y-1">
+        <h1 class="text-lg font-semibold text-zinc-50">GitHub QoL</h1>
+        <p class="text-xs leading-relaxed text-zinc-500">
+          Quality-of-life tweaks for GitHub pull requests.
+        </p>
+      </header>
+
+      <section class="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-4">
+        <h2 class="text-sm font-medium text-zinc-200">Section order</h2>
+        <p class="text-xs leading-snug text-zinc-500">
+          The description always stays at the top. Sections above the timeline
+          render between it and the activity; sections below render after it.
+        </p>
+        <ul id="section-list" class="space-y-1"></ul>
+      </section>
+
+      <section class="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-4">
+        <h2 class="text-sm font-medium text-zinc-200">Timeline direction</h2>
+        <fieldset id="direction" class="flex gap-2">
+          <button
+            data-direction="newest"
+            class="rounded-md border border-zinc-700 px-3 py-1.5 text-xs"
+          >Newest first</button>
+          <button
+            data-direction="oldest"
+            class="rounded-md border border-zinc-700 px-3 py-1.5 text-xs"
+          >Oldest first</button>
+        </fieldset>
+      </section>
+
+      <section class="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-4">
+        <h2 class="text-sm font-medium text-zinc-200">Description</h2>
+        <label class="flex cursor-pointer gap-3">
+          <input
+            data-setting="collapsePrDescription"
+            type="checkbox"
+            class="mt-0.5 size-4 shrink-0 rounded border-zinc-600 bg-zinc-950 text-blue-500 focus:ring-2 focus:ring-blue-500/30"
+          />
+          <span class="text-sm text-zinc-200">Collapse long PR descriptions</span>
+        </label>
+      </section>
+
+      <p id="options-status" class="min-h-[1rem] text-center text-[10px] text-zinc-600" aria-live="polite"></p>
+    </div>
+
+    <script type="module" src="js/options.min.js"></script>
+  </body>
+</html>
