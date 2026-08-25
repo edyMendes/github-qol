@@ -394,7 +394,7 @@ export function onNavigation(event) {
 }
 
 export function init() {
-  registerBus({ applyNow: applyAll, requestRevalidate: scheduleRevalidate });
+  registerBus({ requestRevalidate: scheduleRevalidate });
   for (const feature of FEATURES) {
     if (feature.status) setProgressProvider(feature.status);
   }
