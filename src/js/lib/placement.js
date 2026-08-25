@@ -94,6 +94,8 @@ export function isPlacedBeforeTimelineItems(wrapper, container, selector) {
  * as siblings. Moving this unit (instead of the bare partial) preserves
  * GitHub's native wrapper classes (e.g. the React "Stack" merge box) so the
  * box looks exactly like it does natively, just below the description.
+ * Also used for the copilot banner unit — the climb is generic despite
+ * the historical name.
  */
 export function findMergeBoxUnit(mergeBox, container, itemSelector) {
   if (!mergeBox?.isConnected || !container) return null;
