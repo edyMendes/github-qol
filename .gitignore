@@ -1,4 +1,5 @@
 node_modules/
+.worktrees/
 
 # Build artifacts (regenerate with `npm run build`)
 src/js/*.min.js
