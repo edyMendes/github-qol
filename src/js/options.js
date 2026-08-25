@@ -5,7 +5,7 @@ import {
 } from "./settings.js";
 
 const SECTION_LABELS = {
-  copilot: "Copilot banner",
+  description: "PR description",
   mergebox: "Merge status box",
   commentBox: "Comment box",
   timeline: "Comments & activity",
@@ -144,6 +144,19 @@ collapseInput?.addEventListener("change", async () => {
   }
 });
 
+const hideCopilotInput = document.querySelector(
+  '[data-setting="hideCopilotBanner"]',
+);
+hideCopilotInput?.addEventListener("change", async () => {
+  try {
+    await saveSettings({ hideCopilotBanner: hideCopilotInput.checked });
+    showStatus("Saved");
+  } catch (error) {
+    console.error("GitHub QoL options:", error);
+    showStatus("Could not save");
+  }
+});
+
 (async () => {
   const settings = await getSettings();
   currentOrder = settings.sectionOrder.filter((id) =>
@@ -152,6 +165,7 @@ collapseInput?.addEventListener("change", async () => {
   renderList();
   renderDirection(settings.timelineOrder);
   if (collapseInput) collapseInput.checked = Boolean(settings.collapsePrDescription);
+  if (hideCopilotInput) hideCopilotInput.checked = Boolean(settings.hideCopilotBanner);
 })().catch((error) => {
   console.error("GitHub QoL options:", error);
   showStatus("Could not load settings");

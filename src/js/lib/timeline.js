@@ -3,10 +3,17 @@
  * so they can be unit-tested without the content script's globals.
  */
 
-import { REVERSED_ATTR, TIMELINE_GIDS_ATTR } from "./selectors.js";
+import {
+  DESC_SECTION_ATTR,
+  REVERSED_ATTR,
+  TIMELINE_GIDS_ATTR,
+} from "./selectors.js";
 
 export function getDirectTimelineItems(container, selector) {
-  return [...container.children].filter((child) => child.matches(selector));
+  return [...container.children].filter(
+    (child) =>
+      child.matches(selector) && !child.hasAttribute(DESC_SECTION_ATTR),
+  );
 }
 
 function saveTimelineGids(container, selector) {

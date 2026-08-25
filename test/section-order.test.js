@@ -4,7 +4,7 @@ import { resetDomCache } from "../src/js/content/dom-cache.js";
 
 const DEFAULTS = {
   timelineOrder: "newest",
-  sectionOrder: ["copilot", "mergebox", "commentBox", "timeline"],
+  sectionOrder: ["description", "mergebox", "commentBox", "timeline"],
 };
 
 function buildPage() {
@@ -26,11 +26,10 @@ function buildPage() {
   descWrap.appendChild(descGroup);
   container.appendChild(descWrap);
 
+  // The @copilot hint callout — NOT orderable (hide-copilot owns it);
+  // the engine must leave it wherever it natively sits.
   const bannerUnit = document.createElement("div");
-  const banner = document.createElement("div");
-  banner.setAttribute("data-testid", "copilot-pull-request-summaries");
-  banner.textContent = "Copilot summary";
-  bannerUnit.appendChild(banner);
+  bannerUnit.textContent = "Mention @copilot in a comment to make changes.";
   container.appendChild(bannerUnit);
 
   const stack = document.createElement("div");
@@ -77,8 +76,8 @@ function directChildren(container) {
   return [...container.children].map((el) =>
     el.classList.contains("gqol-mergebox-timeline-row")
       ? "mergebox"
-      : el === document.querySelector("[data-gqol-copilot-moved='1']")
-        ? "copilot"
+      : el.hasAttribute("data-gqol-desc-section")
+        ? "description"
         : el.hasAttribute("data-gqol-comment-box-moved") ||
             el.querySelector(":scope > form.js-new-comment-form")
           ? "commentBox"
@@ -89,11 +88,28 @@ function directChildren(container) {
 }
 
 describe("section-order feature", () => {
-  it("lays out the default order: copilot, mergebox, commentBox above the items", () => {
+  it("lays out the default order: description, mergebox, commentBox above the items", () => {
     const { container } = buildPage();
     expect(sectionOrderFeature.apply(DEFAULTS)).toBe(true);
     expect(directChildren(container)).toEqual([
-      "other", "copilot", "mergebox", "commentBox", "item", "item", "other",
+      "other", "description", "mergebox", "commentBox", "item", "item", "other",
+    ]);
+  });
+
+  it("marks the description unit so the reversal excludes it", () => {
+    const { descWrap } = buildPage();
+    sectionOrderFeature.apply(DEFAULTS);
+    expect(descWrap.getAttribute("data-gqol-desc-section")).toBe("1");
+  });
+
+  it("places the description below the items when ranked last", () => {
+    const { container } = buildPage();
+    sectionOrderFeature.apply({
+      ...DEFAULTS,
+      sectionOrder: ["mergebox", "commentBox", "timeline", "description"],
+    });
+    expect(directChildren(container)).toEqual([
+      "other", "mergebox", "commentBox", "item", "item", "description", "other",
     ]);
   });
 
@@ -101,35 +117,40 @@ describe("section-order feature", () => {
     const { container, commentWrapper } = buildPage();
     sectionOrderFeature.apply({
       ...DEFAULTS,
-      sectionOrder: ["copilot", "mergebox", "timeline", "commentBox"],
+      sectionOrder: ["description", "mergebox", "timeline", "commentBox"],
     });
-    // 6 children: footers stay INSIDE the box in after-mode.
     expect(directChildren(container)).toEqual([
-      "other", "copilot", "mergebox", "item", "item", "commentBox",
+      "other", "description", "mergebox", "item", "item", "commentBox",
     ]);
     expect(commentWrapper.hasAttribute("data-gqol-comment-box-moved")).toBe(false);
   });
 
   it("reorders when the rank flips between passes", () => {
-    const { container, bannerUnit } = buildPage();
+    const { container } = buildPage();
     sectionOrderFeature.apply(DEFAULTS);
     sectionOrderFeature.apply({
       ...DEFAULTS,
-      sectionOrder: ["mergebox", "copilot", "commentBox", "timeline"],
+      sectionOrder: ["mergebox", "description", "commentBox", "timeline"],
     });
     expect(directChildren(container)).toEqual([
-      "other", "mergebox", "copilot", "commentBox", "item", "item", "other",
+      "other", "mergebox", "description", "commentBox", "item", "item", "other",
     ]);
-    expect(bannerUnit.getAttribute("data-gqol-copilot-moved")).toBe("1");
+  });
+
+  it("leaves the copilot hint untouched (not an orderable section)", () => {
+    const { bannerUnit } = buildPage();
+    sectionOrderFeature.apply(DEFAULTS);
+    expect(bannerUnit.hasAttribute("data-gqol-copilot-hidden")).toBe(false);
+    expect(bannerUnit.closest(".js-discussion")).not.toBeNull();
   });
 
   it("skips absent sections without failing", () => {
-    const { container, bannerUnit } = buildPage();
-    bannerUnit.remove();
+    const { container, stack } = buildPage();
+    stack.remove();
     resetDomCache();
     sectionOrderFeature.apply(DEFAULTS);
     expect(directChildren(container)).toEqual([
-      "other", "mergebox", "commentBox", "item", "item", "other",
+      "other", "description", "commentBox", "item", "item", "other",
     ]);
   });
 
@@ -140,11 +161,11 @@ describe("section-order feature", () => {
   });
 
   it("reports needsWork when a section is out of slot", () => {
-    const { container } = buildPage();
+    buildPage();
     sectionOrderFeature.apply(DEFAULTS);
     sectionOrderFeature.apply({
       ...DEFAULTS,
-      sectionOrder: ["mergebox", "copilot", "commentBox", "timeline"],
+      sectionOrder: ["mergebox", "description", "commentBox", "timeline"],
     });
     expect(sectionOrderFeature.needsWork(DEFAULTS)).toBe(true);
   });
@@ -159,7 +180,7 @@ describe("section-order feature", () => {
     expect(document.querySelector(".gqol-mergebox-timeline-row")).toBe(null);
     expect(document.querySelector("[data-gqol-comment-footer-moved]")).toBe(null);
     expect(commentWrapper.hasAttribute("data-gqol-comment-box-moved")).toBe(false);
-    expect(bannerUnit.hasAttribute("data-gqol-copilot-moved")).toBe(false);
+    expect(descWrap.hasAttribute("data-gqol-desc-section")).toBe(false);
   });
 
   it("aggregates recovery across descriptors", () => {

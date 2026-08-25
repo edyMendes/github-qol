@@ -292,3 +292,8 @@ html[data-gqol-active] .gqol-comment-box-at-top.timeline-comment-wrapper,
 html[data-gqol-active] .gqol-comment-box-at-top .timeline-comment-wrapper {
   margin-bottom: var(--base-size-16, 16px);
 }
+
+/* Copilot banner hide toggle (hide-copilot feature). */
+[data-gqol-copilot-hidden="1"] {
+  display: none !important;
+}

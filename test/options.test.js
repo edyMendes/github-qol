@@ -11,6 +11,7 @@ function buildOptionsDom() {
       <button data-direction="oldest">Oldest first</button>
     </fieldset>
     <input data-setting="collapsePrDescription" type="checkbox" />
+    <input data-setting="hideCopilotBanner" type="checkbox" />
     <p id="options-status"></p>
   `;
 }
@@ -30,7 +31,7 @@ describe("options page", () => {
   it("renders one row per section in stored order", async () => {
     await chrome.storage.sync.set({
       [STORAGE_KEY]: {
-        sectionOrder: ["timeline", "copilot", "mergebox", "commentBox"],
+        sectionOrder: ["timeline", "description", "mergebox", "commentBox"],
       },
     });
     await importOptions();
@@ -38,7 +39,22 @@ describe("options page", () => {
       const ids = [...document.querySelectorAll(SECTION_ROW_SELECTOR)].map(
         (row) => row.dataset.sectionId,
       );
-      expect(ids).toEqual(["timeline", "copilot", "mergebox", "commentBox"]);
+      expect(ids).toEqual(["timeline", "description", "mergebox", "commentBox"]);
+    });
+  });
+
+  it("renders no row for the retired copilot id", async () => {
+    await chrome.storage.sync.set({
+      [STORAGE_KEY]: {
+        sectionOrder: ["copilot", "mergebox", "commentBox", "timeline"],
+      },
+    });
+    await importOptions();
+    await vi.waitFor(() => {
+      const ids = [...document.querySelectorAll(SECTION_ROW_SELECTOR)].map(
+        (row) => row.dataset.sectionId,
+      );
+      expect(ids).toEqual(["description", "mergebox", "commentBox", "timeline"]);
     });
   });
 
@@ -55,9 +71,11 @@ describe("options page", () => {
 
     await vi.waitFor(async () => {
       const settings = await getSettings();
+      // Default [description, mergebox, commentBox, timeline]; mergebox
+      // (index 1) moved up one → [mergebox, description, ...].
       expect(settings.sectionOrder).toEqual([
         "mergebox",
-        "copilot",
+        "description",
         "commentBox",
         "timeline",
       ]);
@@ -70,16 +88,16 @@ describe("options page", () => {
       expect(document.querySelectorAll(SECTION_ROW_SELECTOR).length).toBe(4);
     });
 
-    const copilotRow = document.querySelector('[data-section-id="copilot"]');
-    copilotRow.querySelector("[data-move='down']").click();
+    const descriptionRow = document.querySelector('[data-section-id="description"]');
+    descriptionRow.querySelector("[data-move='down']").click();
 
     await vi.waitFor(async () => {
       const settings = await getSettings();
-      // Default [copilot, mergebox, commentBox, timeline]; copilot (index 0)
-      // moved down one → [mergebox, copilot, commentBox, timeline].
+      // Default [description, mergebox, commentBox, timeline]; description
+      // (index 0) moved down one → [mergebox, description, ...].
       expect(settings.sectionOrder).toEqual([
         "mergebox",
-        "copilot",
+        "description",
         "commentBox",
         "timeline",
       ]);
@@ -113,6 +131,22 @@ describe("options page", () => {
     await vi.waitFor(async () => {
       const settings = await getSettings();
       expect(settings.collapsePrDescription).toBe(false);
+    });
+  });
+
+  it("persists the copilot hide toggle", async () => {
+    await importOptions();
+    await vi.waitFor(() => {
+      expect(document.querySelectorAll(SECTION_ROW_SELECTOR).length).toBe(4);
+    });
+
+    const input = document.querySelector('[data-setting="hideCopilotBanner"]');
+    input.checked = true;
+    input.dispatchEvent(new Event("change"));
+
+    await vi.waitFor(async () => {
+      const settings = await getSettings();
+      expect(settings.hideCopilotBanner).toBe(true);
     });
   });
 });

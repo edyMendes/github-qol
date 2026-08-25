@@ -59,12 +59,13 @@ describe("normalizeSettings", () => {
       normalizeSettings({
         timelineOrder: "oldest",
         collapsePrDescription: false,
-        sectionOrder: ["timeline", "copilot", "commentBox", "mergebox"],
+        sectionOrder: ["timeline", "description", "commentBox", "mergebox"],
       }),
     ).toEqual({
       timelineOrder: "oldest",
       collapsePrDescription: false,
-      sectionOrder: ["timeline", "copilot", "commentBox", "mergebox"],
+      hideCopilotBanner: false,
+      sectionOrder: ["timeline", "description", "commentBox", "mergebox"],
     });
   });
 
@@ -100,39 +101,47 @@ describe("normalizeSettings: timelineOrder", () => {
 
 describe("normalizeSettings: sectionOrder", () => {
   it("keeps a valid full ordering", () => {
-    const order = ["timeline", "copilot", "commentBox", "mergebox"];
+    const order = ["timeline", "description", "commentBox", "mergebox"];
     expect(normalizeSettings({ sectionOrder: order }).sectionOrder).toEqual(order);
   });
 
-  it("drops unknown ids, dedupes, and appends missing ids", () => {
+  it("drops unknown ids, dedupes, backfills (description on top)", () => {
     expect(
-      normalizeSettings({ sectionOrder: ["bogus", "timeline", "timeline", "copilot"] })
+      normalizeSettings({ sectionOrder: ["bogus", "timeline", "timeline", "mergebox"] })
         .sectionOrder,
-    ).toEqual(["timeline", "copilot", "mergebox", "commentBox"]);
+    ).toEqual(["description", "timeline", "mergebox", "commentBox"]);
   });
 
   it("falls back to the default order for non-array input", () => {
     expect(normalizeSettings({ sectionOrder: "nope" }).sectionOrder).toEqual([
-      "copilot", "mergebox", "commentBox", "timeline",
+      "description", "mergebox", "commentBox", "timeline",
     ]);
   });
 
   it("migrates showMergeBoxBelowDescription=false by demoting mergebox", () => {
     expect(normalizeSettings({ showMergeBoxBelowDescription: false }).sectionOrder).toEqual([
-      "copilot", "commentBox", "timeline", "mergebox",
+      "description", "commentBox", "timeline", "mergebox",
     ]);
   });
 
   it("migrates commentBoxAtTop=false by demoting commentBox", () => {
     expect(normalizeSettings({ commentBoxAtTop: false }).sectionOrder).toEqual([
-      "copilot", "mergebox", "timeline", "commentBox",
+      "description", "mergebox", "timeline", "commentBox",
     ]);
   });
 
   it("migrates reverseTimeline=false by demoting commentBox", () => {
     expect(normalizeSettings({ reverseTimeline: false }).sectionOrder).toEqual([
-      "copilot", "mergebox", "timeline", "commentBox",
+      "description", "mergebox", "timeline", "commentBox",
     ]);
+  });
+
+  it("migrates v0 orders: drops copilot, inserts description at the top", () => {
+    expect(
+      normalizeSettings({
+        sectionOrder: ["timeline", "mergebox", "commentBox", "copilot"],
+      }).sectionOrder,
+    ).toEqual(["description", "timeline", "mergebox", "commentBox"]);
   });
 });
 
@@ -140,10 +149,11 @@ describe("normalizeSettings: legacy contraction", () => {
   it("drops legacy booleans from the output", () => {
     const s = normalizeSettings({ reverseTimeline: false, commentBoxAtTop: false });
     expect(Object.keys(s).sort()).toEqual(
-      ["collapsePrDescription", "sectionOrder", "timelineOrder"].sort(),
+      ["collapsePrDescription", "sectionOrder", "timelineOrder", "hideCopilotBanner"].sort(),
     );
     expect(s.timelineOrder).toBe("oldest");
-    expect(s.sectionOrder).toEqual(["copilot", "mergebox", "timeline", "commentBox"]);
+    expect(s.sectionOrder).toEqual(["description", "mergebox", "timeline", "commentBox"]);
+    expect(s.hideCopilotBanner).toBe(false);
   });
 });
 

@@ -6,7 +6,9 @@
  * decides WHERE each section goes based on settings.sectionOrder:
  * ids ranked before "timeline" sit serially above the first timeline
  * item (in user order), ids ranked after sit serially below the last
- * item. The PR description is pinned above and never moves.
+ * item. The description is an orderable section like any other (its
+ * default rank is the top); the Copilot banner is NOT orderable — it is
+ * shown/hidden by the hide-copilot feature.
  *
  * Zone layout runs INSIDE-OUT: the before-zone places sections from the
  * rank closest to the timeline upwards (each new section is inserted
@@ -24,12 +26,12 @@ import {
   findTimelineContainer,
   resetDomCache,
 } from "../dom-cache.js";
+import descriptionDescriptor from "./sections/description.js";
 import mergeboxDescriptor from "./sections/mergebox.js";
 import commentBoxDescriptor from "./sections/comment-box.js";
-import copilotDescriptor from "./sections/copilot.js";
 
 const DESCRIPTORS = new Map(
-  [copilotDescriptor, mergeboxDescriptor, commentBoxDescriptor].map(
+  [descriptionDescriptor, mergeboxDescriptor, commentBoxDescriptor].map(
     (descriptor) => [descriptor.id, descriptor],
   ),
 );

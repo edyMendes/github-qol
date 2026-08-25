@@ -48,7 +48,7 @@ describe("popup", () => {
       const settings = await getSettings();
       expect(settings.timelineOrder).toBe("oldest");
       expect(settings.sectionOrder).toEqual([
-        "copilot", "mergebox", "commentBox", "timeline",
+        "description", "mergebox", "commentBox", "timeline",
       ]);
     });
   });

@@ -42,6 +42,7 @@ import { registerBus } from "./bus.js";
 import collapseDescription from "./features/collapse-description.js";
 import sectionOrder from "./features/section-order.js";
 import reverseTimeline from "./features/reverse-timeline.js";
+import hideCopilot from "./features/hide-copilot.js";
 
 // Elements the extension itself renders. Mutations whose target lives
 // inside one of these must never trigger revalidation — re-applying
@@ -78,9 +79,10 @@ const RECOVERY_MARKER_LIMIT = 20;
 const RECOVERY_MARKER_PREFIX = "gqol-reloaded:";
 
 // Apply order matters: collapse first (reads the description in place),
-// then the section layout (moves whole sections around the stream), then
-// the reversal (reorders the stream the sections surround).
-const FEATURES = [collapseDescription, sectionOrder, reverseTimeline];
+// then the section layout (moves whole sections around the stream),
+// then the reversal (reorders the stream the sections surround), and
+// finally the copilot-banner hide (independent of all placement).
+const FEATURES = [collapseDescription, sectionOrder, reverseTimeline, hideCopilot];
 
 let globalMutationObserver = null;
 let observerSettledAt = null;

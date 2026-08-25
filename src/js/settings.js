@@ -1,6 +1,6 @@
 export const STORAGE_KEY = "githubQolSettings";
 
-export const SECTION_IDS = ["copilot", "mergebox", "commentBox", "timeline"];
+export const SECTION_IDS = ["description", "mergebox", "commentBox", "timeline"];
 export const TIMELINE_ORDERS = ["newest", "oldest"];
 
 const DEFAULT_SECTION_ORDER = [...SECTION_IDS];
@@ -12,12 +12,17 @@ const DEFAULT_SECTION_ORDER = [...SECTION_IDS];
  *
  * Legacy stored shapes (reverseTimeline, showMergeBoxBelowDescription,
  * commentBoxAtTop booleans) are migrated forward on read by
- * normalizeSettings; those keys never resurface in output.
+ * normalizeSettings; those keys never resurface in output. Orders from
+ * older versions may also carry a now-retired "copilot" id (the banner
+ * became a show/hide toggle) and lack "description" (it became
+ * orderable) — normalizeSectionOrder drops the former and inserts the
+ * latter at the top so no one's description jumps below the timeline.
  */
 export const SETTING_DEFINITIONS = [
   { key: "timelineOrder", type: "enum", values: TIMELINE_ORDERS, default: "newest", popupControlled: true },
   { key: "sectionOrder", type: "sectionOrder", values: SECTION_IDS, default: DEFAULT_SECTION_ORDER, popupControlled: false },
   { key: "collapsePrDescription", type: "boolean", default: true, popupControlled: true },
+  { key: "hideCopilotBanner", type: "boolean", default: false, popupControlled: false },
 ];
 
 export const DEFAULT_SETTINGS = Object.fromEntries(
@@ -27,14 +32,20 @@ export const DEFAULT_SETTINGS = Object.fromEntries(
   ]),
 );
 
-/** Drop unknown ids, dedupe, append missing ids in canonical order. */
+/**
+ * Drop unknown ids, dedupe, and backfill missing ids: description goes
+ * to the TOP (its native spot — upgrades must not demote it), every
+ * other id appends at the end.
+ */
 function normalizeSectionOrder(value) {
   const ids = Array.isArray(value)
     ? value.filter((id) => SECTION_IDS.includes(id))
     : [];
   const unique = [...new Set(ids)];
   for (const id of SECTION_IDS) {
-    if (!unique.includes(id)) unique.push(id);
+    if (unique.includes(id)) continue;
+    if (id === "description") unique.unshift(id);
+    else unique.push(id);
   }
   return unique;
 }
