@@ -185,7 +185,11 @@ describe("orchestrator reapply lifecycle after back-navigation", () => {
 
   it("re-applies only the merge box in oldest-first mode", async () => {
     await chrome.storage.sync.set({
-      [STORAGE_KEY]: { ...DEFAULT_SETTINGS, reverseTimeline: false },
+      [STORAGE_KEY]: {
+        ...DEFAULT_SETTINGS,
+        timelineOrder: "oldest",
+        sectionOrder: ["copilot", "mergebox", "timeline", "commentBox"],
+      },
     });
 
     history.pushState(null, "", PR_URL);

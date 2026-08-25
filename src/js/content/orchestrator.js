@@ -40,8 +40,7 @@ import {
 } from "./status.js";
 import { registerBus } from "./bus.js";
 import collapseDescription from "./features/collapse-description.js";
-import mergeboxBelowDescription from "./features/mergebox.js";
-import commentBoxPlacement from "./features/comment-box.js";
+import sectionOrder from "./features/section-order.js";
 import reverseTimeline from "./features/reverse-timeline.js";
 import sortRow from "./features/sort-row.js";
 
@@ -80,13 +79,13 @@ const RECOVERY_MARKER_LIMIT = 20;
 const RECOVERY_MARKER_PREFIX = "gqol-reloaded:";
 
 // Apply order matters: collapse first (reads the description in place),
-// then the moves, then the reversal (reorders the container the others
-// live in), and finally the sort row (anchored above the comment box once
-// it has settled in its final spot).
+// then the section layout (moves whole sections around the stream), then
+// the reversal (reorders the stream itself), and finally the sort row
+// (anchored above the comment box once it settled — removed in the next
+// task).
 const FEATURES = [
   collapseDescription,
-  mergeboxBelowDescription,
-  commentBoxPlacement,
+  sectionOrder,
   reverseTimeline,
   sortRow,
 ];
