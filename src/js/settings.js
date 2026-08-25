@@ -10,18 +10,14 @@ const DEFAULT_SECTION_ORDER = [...SECTION_IDS];
  * allowed values (enum/sectionOrder), and whether the popup renders a
  * control for it. DEFAULT_SETTINGS derives from this list.
  *
- * Legacy boolean keys (reverseTimeline, showMergeBoxBelowDescription,
- * commentBoxAtTop) are temporary mirrors of timelineOrder/sectionOrder
- * kept until every consumer reads the new keys; normalizeSettings
- * derives them in both directions.
+ * Legacy stored shapes (reverseTimeline, showMergeBoxBelowDescription,
+ * commentBoxAtTop booleans) are migrated forward on read by
+ * normalizeSettings; those keys never resurface in output.
  */
 export const SETTING_DEFINITIONS = [
   { key: "timelineOrder", type: "enum", values: TIMELINE_ORDERS, default: "newest", popupControlled: false },
   { key: "sectionOrder", type: "sectionOrder", values: SECTION_IDS, default: DEFAULT_SECTION_ORDER, popupControlled: false },
   { key: "collapsePrDescription", type: "boolean", default: true, popupControlled: true },
-  { key: "reverseTimeline", type: "boolean", default: true, popupControlled: false },
-  { key: "showMergeBoxBelowDescription", type: "boolean", default: true, popupControlled: true },
-  { key: "commentBoxAtTop", type: "boolean", default: true, popupControlled: true },
 ];
 
 export const DEFAULT_SETTINGS = Object.fromEntries(
@@ -44,8 +40,9 @@ function normalizeSectionOrder(value) {
 }
 
 /**
- * Cross-derive old and new keys so either shape produces both, until the
- * legacy keys are contracted away. New keys win when both are present.
+ * Migrate legacy stored shapes forward: derive timelineOrder from
+ * reverseTimeline and sectionOrder from the legacy booleans. New keys
+ * win when both are present; legacy keys never appear in output.
  */
 function deriveSettings(raw) {
   const next = { ...raw };
@@ -67,17 +64,6 @@ function deriveSettings(raw) {
     next.sectionOrder = order;
   }
 
-  if (next.reverseTimeline === undefined && next.timelineOrder !== undefined) {
-    next.reverseTimeline = next.timelineOrder === "newest";
-  }
-  if (next.showMergeBoxBelowDescription === undefined) {
-    next.showMergeBoxBelowDescription =
-      next.sectionOrder.indexOf("mergebox") < next.sectionOrder.indexOf("timeline");
-  }
-  if (next.commentBoxAtTop === undefined) {
-    next.commentBoxAtTop =
-      next.sectionOrder.indexOf("commentBox") < next.sectionOrder.indexOf("timeline");
-  }
   return next;
 }
 

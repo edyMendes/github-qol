@@ -35,11 +35,7 @@ describe("SETTING_DEFINITIONS", () => {
 
   it("keeps the popupControlled marking in sync with definitions", () => {
     const popupKeys = SETTING_DEFINITIONS.filter((d) => d.popupControlled);
-    expect(popupKeys.map((d) => d.key)).toEqual([
-      "collapsePrDescription",
-      "showMergeBoxBelowDescription",
-      "commentBoxAtTop",
-    ]);
+    expect(popupKeys.map((d) => d.key)).toEqual(["collapsePrDescription"]);
   });
 
   it("declares enum and sectionOrder values", () => {
@@ -58,39 +54,31 @@ describe("normalizeSettings", () => {
     expect(normalizeSettings({})).toEqual(DEFAULT_SETTINGS);
   });
 
-  it("keeps explicit booleans", () => {
+  it("keeps explicit values", () => {
     expect(
       normalizeSettings({
-        reverseTimeline: false,
+        timelineOrder: "oldest",
         collapsePrDescription: false,
-        showMergeBoxBelowDescription: false,
-        commentBoxAtTop: false,
+        sectionOrder: ["timeline", "copilot", "commentBox", "mergebox"],
       }),
     ).toEqual({
-      reverseTimeline: false,
-      collapsePrDescription: false,
-      showMergeBoxBelowDescription: false,
-      commentBoxAtTop: false,
       timelineOrder: "oldest",
-      sectionOrder: ["copilot", "timeline", "mergebox", "commentBox"],
+      collapsePrDescription: false,
+      sectionOrder: ["timeline", "copilot", "commentBox", "mergebox"],
     });
   });
 
   it("falls back per-key when a value is undefined", () => {
-    expect(normalizeSettings({ reverseTimeline: false })).toEqual({
+    expect(normalizeSettings({ timelineOrder: "oldest" })).toEqual({
       ...DEFAULT_SETTINGS,
-      reverseTimeline: false,
       timelineOrder: "oldest",
-      sectionOrder: ["copilot", "mergebox", "timeline", "commentBox"],
-      commentBoxAtTop: false,
     });
   });
 
-  it("coerces values with Boolean()", () => {
-    expect(normalizeSettings({ reverseTimeline: 0 })).toEqual({
+  it("coerces boolean values", () => {
+    expect(normalizeSettings({ collapsePrDescription: 0 })).toEqual({
       ...DEFAULT_SETTINGS,
-      reverseTimeline: false,
-      timelineOrder: "oldest",
+      collapsePrDescription: false,
     });
   });
 });
@@ -148,19 +136,14 @@ describe("normalizeSettings: sectionOrder", () => {
   });
 });
 
-describe("normalizeSettings: legacy mirrors (expand phase)", () => {
-  it("derives legacy booleans from new keys", () => {
-    const s = normalizeSettings({ timelineOrder: "oldest", sectionOrder: ["copilot", "timeline", "mergebox", "commentBox"] });
-    expect(s.reverseTimeline).toBe(false);
-    expect(s.showMergeBoxBelowDescription).toBe(false);
-    expect(s.commentBoxAtTop).toBe(false);
-  });
-
-  it("derives new keys from legacy booleans", () => {
-    const s = normalizeSettings({ reverseTimeline: true, showMergeBoxBelowDescription: false, commentBoxAtTop: true });
-    expect(s.timelineOrder).toBe("newest");
-    expect(s.sectionOrder).toEqual(["copilot", "commentBox", "timeline", "mergebox"]);
-    expect(s.showMergeBoxBelowDescription).toBe(false);
+describe("normalizeSettings: legacy contraction", () => {
+  it("drops legacy booleans from the output", () => {
+    const s = normalizeSettings({ reverseTimeline: false, commentBoxAtTop: false });
+    expect(Object.keys(s).sort()).toEqual(
+      ["collapsePrDescription", "sectionOrder", "timelineOrder"].sort(),
+    );
+    expect(s.timelineOrder).toBe("oldest");
+    expect(s.sectionOrder).toEqual(["copilot", "mergebox", "timeline", "commentBox"]);
   });
 });
 
@@ -170,16 +153,10 @@ describe("getSettings", () => {
   });
 
   it("returns normalized settings from sync storage", async () => {
-    chrome.storage.sync.__store.set(STORAGE_KEY, {
-      reverseTimeline: false,
-      commentBoxAtTop: false,
-    });
+    chrome.storage.sync.__store.set(STORAGE_KEY, { timelineOrder: "oldest" });
     expect(await getSettings()).toEqual({
       ...DEFAULT_SETTINGS,
-      reverseTimeline: false,
-      commentBoxAtTop: false,
       timelineOrder: "oldest",
-      sectionOrder: ["copilot", "mergebox", "timeline", "commentBox"],
     });
   });
 
@@ -197,14 +174,11 @@ describe("getSettings", () => {
   it("falls back to local data when sync is readable but empty", async () => {
     // Sync was unavailable when defaults were seeded to local.
     chrome.storage.local.__store.set(STORAGE_KEY, {
-      reverseTimeline: false,
+      timelineOrder: "oldest",
     });
     expect(await getSettings()).toEqual({
       ...DEFAULT_SETTINGS,
-      reverseTimeline: false,
       timelineOrder: "oldest",
-      sectionOrder: ["copilot", "mergebox", "timeline", "commentBox"],
-      commentBoxAtTop: false,
     });
   });
 
@@ -216,19 +190,17 @@ describe("getSettings", () => {
 
 describe("saveSettings", () => {
   it("merges a partial over existing settings and writes to sync", async () => {
-    chrome.storage.sync.__store.set(STORAGE_KEY, { reverseTimeline: true });
-    const saved = await saveSettings({ commentBoxAtTop: false });
-
-    expect(saved).toEqual({ ...DEFAULT_SETTINGS, commentBoxAtTop: false });
+    chrome.storage.sync.__store.set(STORAGE_KEY, { timelineOrder: "oldest" });
+    const saved = await saveSettings({ collapsePrDescription: false });
+    expect(saved).toEqual({ ...DEFAULT_SETTINGS, timelineOrder: "oldest", collapsePrDescription: false });
     expect(chrome.storage.sync.__store.get(STORAGE_KEY)).toEqual(saved);
-    expect(chrome.storage.local.__store.has(STORAGE_KEY)).toBe(false);
   });
 
   it("falls back to local storage when sync write fails", async () => {
     chrome.storage.sync.__failSet = true;
-    const saved = await saveSettings({ reverseTimeline: false });
+    const saved = await saveSettings({ timelineOrder: "oldest" });
 
-    expect(saved.reverseTimeline).toBe(false);
+    expect(saved.timelineOrder).toBe("oldest");
     expect(chrome.storage.local.__store.get(STORAGE_KEY)).toEqual(saved);
   });
 });
@@ -240,7 +212,7 @@ describe("ensureDefaultSettings", () => {
   });
 
   it("does not overwrite existing settings", async () => {
-    const existing = { reverseTimeline: false };
+    const existing = { timelineOrder: "oldest" };
     chrome.storage.sync.__store.set(STORAGE_KEY, existing);
     await ensureDefaultSettings();
     expect(chrome.storage.sync.__store.get(STORAGE_KEY)).toEqual(existing);
