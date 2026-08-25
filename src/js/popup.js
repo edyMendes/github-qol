@@ -16,9 +16,6 @@ function showStatus(message) {
   }, 1500);
 }
 
-// One checkbox per popup-controlled definition, bound generically through
-// its data-setting attribute — adding a setting is a definition entry
-// plus one checkbox in popup.html, never a change here.
 const settingInputs = new Map(
   SETTING_DEFINITIONS.filter((definition) => definition.popupControlled).map(
     (definition) => [
@@ -28,6 +25,27 @@ const settingInputs = new Map(
   ),
 );
 
+// Booleans bind checked directly; enums bind through data-on/data-off so
+// one checkbox expresses "newest" vs "oldest".
+function readInput(definition, input) {
+  if (definition.type === "enum") {
+    return input.checked ? input.dataset.on : input.dataset.off;
+  }
+  return input.checked;
+}
+
+function writeInput(definition, input, value) {
+  if (definition.type === "enum") {
+    input.checked = value === input.dataset.on;
+  } else {
+    input.checked = Boolean(value);
+  }
+}
+
+const definitionsByKey = new Map(
+  SETTING_DEFINITIONS.map((definition) => [definition.key, definition]),
+);
+
 for (const [key, input] of settingInputs) {
   if (!input) {
     console.warn(`GitHub QoL popup: no control for setting "${key}".`);
@@ -35,7 +53,7 @@ for (const [key, input] of settingInputs) {
   }
   input.addEventListener("change", async () => {
     try {
-      await saveSettings({ [key]: input.checked });
+      await saveSettings({ [key]: readInput(definitionsByKey.get(key), input) });
       showStatus("Saved");
     } catch (error) {
       console.error("GitHub QoL popup:", error);
@@ -44,10 +62,14 @@ for (const [key, input] of settingInputs) {
   });
 }
 
+document
+  .getElementById("open-options")
+  ?.addEventListener("click", () => chrome.runtime.openOptionsPage());
+
 (async () => {
   const settings = await getSettings();
   for (const [key, input] of settingInputs) {
-    if (input) input.checked = Boolean(settings[key]);
+    if (input) writeInput(definitionsByKey.get(key), input, settings[key]);
   }
 })().catch((error) => {
   console.error("GitHub QoL popup:", error);

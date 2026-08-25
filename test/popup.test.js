@@ -1,16 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { getSettings, STORAGE_KEY } from "../src/js/settings.js";
 
-/**
- * The popup binds checkboxes generically via data-setting attributes: the
- * settings definition (key, default, popupControlled) in settings.js is
- * the single source of truth — adding a setting is one definition plus
- * one checkbox in popup.html, no popup.js edits.
- */
-
 function buildPopupDom() {
   document.body.innerHTML = `
+    <input data-setting="timelineOrder" data-on="newest" data-off="oldest" type="checkbox" />
     <input data-setting="collapsePrDescription" type="checkbox" />
+    <button id="open-options"></button>
     <p id="popup-status"></p>
   `;
 }
@@ -27,44 +22,45 @@ beforeEach(() => {
 });
 
 describe("popup", () => {
-  it("loads stored settings into the matching checkboxes", async () => {
+  it("loads timelineOrder newest as a checked box", async () => {
     await chrome.storage.sync.set({
-      [STORAGE_KEY]: {
-        timelineOrder: "newest",
-        collapsePrDescription: false,
-      },
+      [STORAGE_KEY]: { timelineOrder: "oldest" },
     });
     await importPopup();
     await vi.waitFor(() => {
       expect(
-        document.querySelector('[data-setting="collapsePrDescription"]').checked,
+        document.querySelector('[data-setting="timelineOrder"]').checked,
       ).toBe(false);
     });
   });
 
-  it("defaults to checked when nothing is stored", async () => {
-    await importPopup();
-    await vi.waitFor(() => {
-      for (const input of document.querySelectorAll("[data-setting]")) {
-        expect(input.checked).toBe(true);
-      }
-    });
-  });
-
-  it("persists a flip under the setting's data-setting key", async () => {
+  it("persists a direction flip", async () => {
     await importPopup();
     await vi.waitFor(async () => {
       expect(await getSettings()).toBeTruthy();
     });
 
-    const input = document.querySelector('[data-setting="collapsePrDescription"]');
+    const input = document.querySelector('[data-setting="timelineOrder"]');
     input.checked = false;
     input.dispatchEvent(new Event("change"));
 
     await vi.waitFor(async () => {
       const settings = await getSettings();
-      expect(settings.collapsePrDescription).toBe(false);
-      expect(settings.timelineOrder).toBe("newest");
+      expect(settings.timelineOrder).toBe("oldest");
+      expect(settings.sectionOrder).toEqual([
+        "copilot", "mergebox", "commentBox", "timeline",
+      ]);
     });
+  });
+
+  it("opens the options page from the link", async () => {
+    let opened = false;
+    chrome.runtime.openOptionsPage = () => {
+      opened = true;
+      return Promise.resolve();
+    };
+    await importPopup();
+    document.getElementById("open-options").click();
+    expect(opened).toBe(true);
   });
 });

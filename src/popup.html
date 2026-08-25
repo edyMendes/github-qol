@@ -18,12 +18,21 @@
       <fieldset class="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-3">
         <legend class="sr-only">Features</legend>
 
-        <div class="space-y-0.5">
-          <span class="block text-sm font-medium text-zinc-200">Reverse PR timeline</span>
-          <span class="block text-xs leading-snug text-zinc-500">
-            Newest or oldest first, applied on every PR page.
+        <label class="flex cursor-pointer gap-3">
+          <input
+            data-setting="timelineOrder"
+            data-on="newest"
+            data-off="oldest"
+            type="checkbox"
+            class="mt-0.5 size-4 shrink-0 rounded border-zinc-600 bg-zinc-950 text-blue-500 focus:ring-2 focus:ring-blue-500/30"
+          />
+          <span class="min-w-0 space-y-0.5">
+            <span class="block text-sm font-medium text-zinc-200">Timeline newest first</span>
+            <span class="block text-xs leading-snug text-zinc-500">
+              Unchecked shows the oldest activity at the top instead.
+            </span>
           </span>
-        </div>
+        </label>
 
         <label class="flex cursor-pointer gap-3">
           <input
@@ -38,35 +47,14 @@
             </span>
           </span>
         </label>
-
-        <label class="flex cursor-pointer gap-3">
-          <input
-            data-setting="showMergeBoxBelowDescription"
-            type="checkbox"
-            class="mt-0.5 size-4 shrink-0 rounded border-zinc-600 bg-zinc-950 text-blue-500 focus:ring-2 focus:ring-blue-500/30"
-          />
-          <span class="min-w-0 space-y-0.5">
-            <span class="block text-sm font-medium text-zinc-200">Merge status below description</span>
-            <span class="block text-xs leading-snug text-zinc-500">
-              Show reviews, checks, and merge conflicts under the PR description.
-            </span>
-          </span>
-        </label>
-
-        <label class="flex cursor-pointer gap-3">
-          <input
-            data-setting="commentBoxAtTop"
-            type="checkbox"
-            class="mt-0.5 size-4 shrink-0 rounded border-zinc-600 bg-zinc-950 text-blue-500 focus:ring-2 focus:ring-blue-500/30"
-          />
-          <span class="min-w-0 space-y-0.5">
-            <span class="block text-sm font-medium text-zinc-200">Comment box follows sort</span>
-            <span class="block text-xs leading-snug text-zinc-500">
-              Newest first: box right above the timeline items. Oldest first: box at the end of the timeline.
-            </span>
-          </span>
-        </label>
       </fieldset>
+
+      <button
+        id="open-options"
+        class="w-full rounded-md border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:border-zinc-500"
+      >
+        Open settings
+      </button>
 
       <p id="popup-status" class="min-h-[1rem] text-center text-[10px] text-zinc-600" aria-live="polite"></p>
     </div>

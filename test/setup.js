@@ -42,7 +42,7 @@ const sync = createArea();
 const local = createArea();
 
 globalThis.chrome = {
-  runtime: { lastError: null },
+  runtime: { lastError: null, openOptionsPage: () => Promise.resolve() },
   storage: {
     sync,
     local,
