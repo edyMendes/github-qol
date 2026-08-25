@@ -3,7 +3,7 @@ import sortRowFeature from "../src/js/content/features/sort-row.js";
 import { resetDomCache } from "../src/js/content/dom-cache.js";
 import { STORAGE_KEY } from "../src/js/settings.js";
 
-const SETTINGS = { reverseTimeline: true };
+const SETTINGS = { timelineOrder: "newest" };
 
 /**
  * Mirrors the PR conversation layout: description block, then timeline

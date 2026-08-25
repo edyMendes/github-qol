@@ -7,7 +7,7 @@ import { cancelPostChangeRetries } from "../src/js/content/hydration.js";
 import { resetStatus } from "../src/js/content/status.js";
 import { REVERSED_ATTR } from "../src/js/lib/selectors.js";
 
-const SETTINGS = { reverseTimeline: true };
+const SETTINGS = { timelineOrder: "newest" };
 
 /**
  * Mirrors the PR conversation layout: description item plus timeline
@@ -101,7 +101,7 @@ describe("reverse-timeline", () => {
     const { container } = buildPage();
     await reverseTimelineFeature.apply(SETTINGS);
     const result = await reverseTimelineFeature.apply({
-      reverseTimeline: false,
+      timelineOrder: "oldest",
     });
     expect(result).toBe(false);
     expect(gids(container)).toEqual(["1", "2", "3"]);
@@ -127,7 +127,7 @@ describe("reverse-timeline", () => {
 describe("timelineStatus descriptor", () => {
   it("returns null when the feature setting is off", () => {
     buildPage();
-    expect(timelineStatus({ reverseTimeline: false })).toBe(null);
+    expect(timelineStatus({ timelineOrder: "oldest" })).toBe(null);
   });
 
   it("returns null once the timeline is reversed", async () => {

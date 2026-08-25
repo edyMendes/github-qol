@@ -71,9 +71,10 @@ function ensureSortRow(settings) {
   }
 
   const placed = placeSortRow(row, container, findSortRowAnchor(container));
+  const newestFirst = settings.timelineOrder === "newest";
   const directionChanged =
-    button.getAttribute("aria-pressed") !== String(settings.reverseTimeline);
-  setSortDirection(button, settings.reverseTimeline);
+    button.getAttribute("aria-pressed") !== String(newestFirst);
+  setSortDirection(button, newestFirst);
   return placed || directionChanged;
 }
 
@@ -82,7 +83,7 @@ function needsWorkSortRow(settings) {
   if (!container) return false;
   const button = getSortButton();
   if (!button) return true;
-  if (button.getAttribute("aria-pressed") !== String(settings.reverseTimeline)) {
+  if (button.getAttribute("aria-pressed") !== String(settings.timelineOrder === "newest")) {
     return true;
   }
   const row = button.closest(`.${SORT_ROW_CLASS}`);

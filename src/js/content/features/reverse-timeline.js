@@ -167,7 +167,7 @@ async function applyReverseTimeline(enabled, settings) {
 }
 
 function needsWorkReverseTimeline(settings) {
-  if (!settings.reverseTimeline) return false;
+  if (settings.timelineOrder !== "newest") return false;
   const container = findTimelineContainer();
   if (getTimelineItems().length >= 2) {
     return Boolean(
@@ -183,7 +183,7 @@ function needsWorkReverseTimeline(settings) {
  * card only exists for this feature's pending work.
  */
 export function timelineStatus(settings) {
-  if (!settings.reverseTimeline || !isPullRequestPage()) return null;
+  if (settings.timelineOrder !== "newest" || !isPullRequestPage()) return null;
 
   const container = findTimelineContainer();
   const items = getTimelineItems();
@@ -238,7 +238,8 @@ export function timelineStatus(settings) {
 
 export default {
   name: "reverse-timeline",
-  apply: (settings) => applyReverseTimeline(settings.reverseTimeline, settings),
+  apply: (settings) =>
+    applyReverseTimeline(settings.timelineOrder === "newest", settings),
   needsWork: needsWorkReverseTimeline,
   reset: undoReverseTimeline,
   status: timelineStatus,

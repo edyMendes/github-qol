@@ -115,7 +115,7 @@ describe("status renderer", () => {
   it("passes settings through to the provider", () => {
     const provider = vi.fn(() => null);
     setProgressProvider(provider);
-    const settings = { reverseTimeline: false };
+    const settings = { timelineOrder: "oldest" };
     renderStatus(settings);
     expect(provider).toHaveBeenCalledWith(settings);
   });
