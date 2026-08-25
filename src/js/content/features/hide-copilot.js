@@ -33,15 +33,15 @@ function findBannerUnit(container) {
   if (matches.length === 0) return null;
 
   // matches are collapsed to the outermost; climb that to the flow unit.
+  // Guard against a null container (selector drift): the climb must never
+  // escape to a body-level wrapper — hiding that could blank the page.
+  if (!container) return null;
   let node = matches[0];
-  while (
-    node.parentElement &&
-    node.parentElement !== container &&
-    node.parentElement !== document.body
-  ) {
+  while (node.parentElement && node.parentElement !== container) {
+    if (node.parentElement === document.body) return null;
     node = node.parentElement;
   }
-  return node.parentElement === container ? node : node;
+  return node.parentElement === container ? node : null;
 }
 
 function unhideAllBanners() {

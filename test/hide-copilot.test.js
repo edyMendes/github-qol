@@ -82,6 +82,22 @@ describe("hide-copilot", () => {
     expect(hideCopilotFeature.needsWork(HIDE)).toBe(false);
   });
 
+  it("never hides anything when the timeline container cannot be found", () => {
+    // Selector drift regression: with no container, a stray text match
+    // must not climb to a body-level wrapper and hide it.
+    buildPage();
+    document.body.classList.add("js-discussion");
+    document.querySelector(".js-discussion").classList.remove("js-discussion");
+    resetDomCache();
+    document.querySelector(".js-timeline-item")?.remove();
+    document.querySelector(".js-timeline-item")?.remove();
+    resetDomCache();
+    expect(hideCopilotFeature.apply(HIDE)).toBe(false);
+    expect(
+      document.querySelector("[data-gqol-copilot-hidden='1']"),
+    ).toBe(null);
+  });
+
   it("reset unhides everything", () => {
     const { bannerUnit } = buildPage();
     hideCopilotFeature.apply(HIDE);
