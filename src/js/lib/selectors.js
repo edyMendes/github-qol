@@ -18,6 +18,11 @@ export const COMMENT_BOX_MOVED_ATTR = "data-gqol-comment-box-moved";
 // the reverse feature, its mutation observer and the status module.
 export const REVERSED_ATTR = "data-gqol-reverse";
 
+// Visual (CSS) reversal for React-era nested streams: those DOM subtrees
+// are React-owned and re-rendering reverts any node moves, so newest-first
+// flips display order instead of document order.
+export const TIMELINE_REVERSED_CLASS = "gqol-timeline-reversed";
+
 // Saved original item order on the container, for exact restore.
 export const TIMELINE_GIDS_ATTR = "data-gqol-timeline-gids";
 

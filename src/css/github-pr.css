@@ -297,3 +297,12 @@ html[data-gqol-active] .gqol-comment-box-at-top .timeline-comment-wrapper {
 [data-gqol-copilot-hidden="1"] {
   display: none !important;
 }
+
+/* Visual (CSS) timeline reversal for React-era nested streams: those
+   subtrees are React-owned and re-rendering reverts node moves, so
+   newest-first flips display order instead of document order. Items
+   streamed in later surface at the top automatically. */
+.gqol-timeline-reversed {
+  display: flex;
+  flex-direction: column-reverse;
+}

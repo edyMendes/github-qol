@@ -3,7 +3,6 @@ import { getSettings, STORAGE_KEY } from "../src/js/settings.js";
 
 function buildPopupDom() {
   document.body.innerHTML = `
-    <input data-setting="timelineOrder" data-on="newest" data-off="oldest" type="checkbox" />
     <input data-setting="collapsePrDescription" type="checkbox" />
     <button id="open-options"></button>
     <p id="popup-status"></p>
@@ -22,34 +21,32 @@ beforeEach(() => {
 });
 
 describe("popup", () => {
-  it("loads timelineOrder newest as a checked box", async () => {
+  it("loads the collapse state", async () => {
     await chrome.storage.sync.set({
-      [STORAGE_KEY]: { timelineOrder: "oldest" },
+      [STORAGE_KEY]: { collapsePrDescription: false },
     });
     await importPopup();
     await vi.waitFor(() => {
       expect(
-        document.querySelector('[data-setting="timelineOrder"]').checked,
+        document.querySelector('[data-setting="collapsePrDescription"]').checked,
       ).toBe(false);
     });
   });
 
-  it("persists a direction flip", async () => {
+  it("persists a collapse flip without touching direction", async () => {
     await importPopup();
     await vi.waitFor(async () => {
       expect(await getSettings()).toBeTruthy();
     });
 
-    const input = document.querySelector('[data-setting="timelineOrder"]');
+    const input = document.querySelector('[data-setting="collapsePrDescription"]');
     input.checked = false;
     input.dispatchEvent(new Event("change"));
 
     await vi.waitFor(async () => {
       const settings = await getSettings();
-      expect(settings.timelineOrder).toBe("oldest");
-      expect(settings.sectionOrder).toEqual([
-        "description", "mergebox", "commentBox", "timeline",
-      ]);
+      expect(settings.collapsePrDescription).toBe(false);
+      expect(settings.timelineOrder).toBe("newest");
     });
   });
 

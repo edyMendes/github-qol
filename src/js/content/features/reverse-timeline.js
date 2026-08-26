@@ -9,6 +9,7 @@ import {
   resolveTimelineStream,
   restoreTimelineOrder,
   reverseTimelineContainer,
+  setVisualReversal,
   TIMELINE_ITEM_SELECTORS,
 } from "../../lib/timeline.js";
 import {
@@ -27,6 +28,8 @@ import { renderStatus } from "../status.js";
 import {
   REVERSED_ATTR,
   SKELETON_SELECTOR,
+  TIMELINE_GIDS_ATTR,
+  TIMELINE_REVERSED_CLASS,
 } from "../../lib/selectors.js";
 
 const HYDRATION_TICK_MS = 250;
@@ -133,7 +136,14 @@ function undoReverseTimeline() {
   timelinePhase = null;
   hydrationStartedAt = 0;
 
+  // Visual mode first: unstyle every reversed wrapper (no DOM restore —
+  // the document order was never touched). Then the legacy mutation
+  // mode: containers with saved gids get their exact order back.
   document.querySelectorAll(`[${REVERSED_ATTR}="1"]`).forEach((parent) => {
+    parent.classList.remove(TIMELINE_REVERSED_CLASS);
+    parent.removeAttribute(REVERSED_ATTR);
+  });
+  document.querySelectorAll(`[${TIMELINE_GIDS_ATTR}]`).forEach((parent) => {
     if (restoreTimelineOrder(parent, streamSelectorFor(parent))) {
       schedulePostChangeRetries(parent);
     }
@@ -154,8 +164,14 @@ async function applyReverseTimeline(enabled, settings) {
     return false;
   }
 
-  if (stream.parent.getAttribute(REVERSED_ATTR) === "1") {
-    observeTimelineContainer(stream.parent, stream.selector);
+  const applied = (s) =>
+    s.parent.getAttribute(REVERSED_ATTR) === "1" &&
+    (!s.nested || s.parent.classList.contains(TIMELINE_REVERSED_CLASS));
+
+  if (applied(stream)) {
+    if (!stream.nested) {
+      observeTimelineContainer(stream.parent, stream.selector);
+    }
     renderStatus(settings);
     return true;
   }
@@ -172,6 +188,17 @@ async function applyReverseTimeline(enabled, settings) {
     renderStatus(settings);
 
     const streamNow = resolveTimelineStream(container) ?? stream;
+
+    if (streamNow.nested) {
+      // React-owned stream: visual reversal only. Node moves here get
+      // reverted by React reconciliation (observed on live pages), and
+      // column-reverse also surfaces newly streamed items at the top
+      // with no observer work.
+      const changed = setVisualReversal(streamNow.parent, true);
+      resetDomCache();
+      return changed;
+    }
+
     const reversed = reverseTimelineContainer(
       streamNow.parent,
       streamNow.selector,
@@ -196,6 +223,12 @@ function needsWorkReverseTimeline(settings) {
   if (!container) return false;
   const stream = resolveTimelineStream(container);
   if (stream) {
+    if (stream.nested) {
+      return !(
+        stream.parent.getAttribute(REVERSED_ATTR) === "1" &&
+        stream.parent.classList.contains(TIMELINE_REVERSED_CLASS)
+      );
+    }
     return stream.parent.getAttribute(REVERSED_ATTR) !== "1";
   }
   return Boolean(timelineNeedsHydration(container));

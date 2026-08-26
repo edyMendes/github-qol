@@ -203,24 +203,27 @@ describe("reverse-timeline: React-era stream shape", () => {
     return { flow, container, inner };
   }
 
-  it("reverses the nested .TimelineItem stream and marks its parent", async () => {
+  it("applies VISUAL reversal to the nested .TimelineItem stream", async () => {
     const { inner } = buildReactPage();
     const result = await reverseTimelineFeature.apply(SETTINGS);
     expect(result).toBe(true);
+    // React-owned DOM: document order must be untouched; the display
+    // flips via the reversal class (column-reverse).
+    expect(inner.classList.contains("gqol-timeline-reversed")).toBe(true);
     expect(inner.getAttribute(REVERSED_ATTR)).toBe("1");
     const gidsInDom = [...inner.children].map((el) =>
       el.getAttribute("data-gid"),
     );
-    expect(gidsInDom).toEqual(["3", "2", "1"]);
+    expect(gidsInDom).toEqual(["1", "2", "3"]);
   });
 
-  it("reports no work after reversing the nested stream", async () => {
+  it("reports no work after visual reversal", async () => {
     buildReactPage();
     await reverseTimelineFeature.apply(SETTINGS);
     expect(reverseTimelineFeature.needsWork(SETTINGS)).toBe(false);
   });
 
-  it("restores the nested stream order on reset", async () => {
+  it("undo removes the visual reversal without touching order", async () => {
     const { inner } = buildReactPage();
     await reverseTimelineFeature.apply(SETTINGS);
     reverseTimelineFeature.reset();
@@ -228,6 +231,16 @@ describe("reverse-timeline: React-era stream shape", () => {
       el.getAttribute("data-gid"),
     );
     expect(gidsInDom).toEqual(["1", "2", "3"]);
+    expect(inner.classList.contains("gqol-timeline-reversed")).toBe(false);
     expect(inner.hasAttribute(REVERSED_ATTR)).toBe(false);
+  });
+
+  it("re-heals when React wipes the class but leaves the attribute", async () => {
+    const { inner } = buildReactPage();
+    await reverseTimelineFeature.apply(SETTINGS);
+    inner.classList.remove("gqol-timeline-reversed");
+    expect(reverseTimelineFeature.needsWork(SETTINGS)).toBe(true);
+    await reverseTimelineFeature.apply(SETTINGS);
+    expect(inner.classList.contains("gqol-timeline-reversed")).toBe(true);
   });
 });

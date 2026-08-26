@@ -35,7 +35,7 @@ describe("SETTING_DEFINITIONS", () => {
 
   it("keeps the popupControlled marking in sync with definitions", () => {
     const popupKeys = SETTING_DEFINITIONS.filter((d) => d.popupControlled);
-    expect(popupKeys.map((d) => d.key)).toEqual(["timelineOrder", "collapsePrDescription"]);
+    expect(popupKeys.map((d) => d.key)).toEqual(["collapsePrDescription"]);
   });
 
   it("declares enum and sectionOrder values", () => {

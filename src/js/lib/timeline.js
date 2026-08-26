@@ -7,6 +7,7 @@ import {
   DESC_SECTION_ATTR,
   REVERSED_ATTR,
   TIMELINE_GIDS_ATTR,
+  TIMELINE_REVERSED_CLASS,
 } from "./selectors.js";
 
 export function getDirectTimelineItems(container, selector) {
@@ -37,7 +38,9 @@ export function resolveTimelineStream(container) {
   if (!container) return null;
   for (const selector of TIMELINE_ITEM_SELECTORS) {
     const items = getDirectTimelineItems(container, selector);
-    if (items.length >= 2) return { parent: container, selector, items };
+    if (items.length >= 2) {
+      return { parent: container, selector, items, nested: false };
+    }
   }
   for (const selector of TIMELINE_ITEM_SELECTORS) {
     const counts = new Map();
@@ -59,10 +62,34 @@ export function resolveTimelineStream(container) {
         parent: best,
         selector,
         items: getDirectTimelineItems(best, selector),
+        nested: true,
       };
     }
   }
   return null;
+}
+
+/**
+ * Visual newest-first for React-era streams: toggle the reversal class
+ * (plus the shared state attribute) on the stream parent. No DOM moves —
+ * React re-rendering cannot revert it, and items appended later display
+ * at the top automatically under column-reverse. Returns whether
+ * anything changed.
+ */
+export function setVisualReversal(parent, on) {
+  if (!parent) return false;
+  const hasAttr = parent.getAttribute(REVERSED_ATTR) === "1";
+  const hasClass = parent.classList.contains(TIMELINE_REVERSED_CLASS);
+  const changed = on ? !hasAttr || !hasClass : hasAttr || hasClass;
+
+  if (on) {
+    parent.setAttribute(REVERSED_ATTR, "1");
+    parent.classList.add(TIMELINE_REVERSED_CLASS);
+  } else {
+    parent.removeAttribute(REVERSED_ATTR);
+    parent.classList.remove(TIMELINE_REVERSED_CLASS);
+  }
+  return changed;
 }
 
 function saveTimelineGids(container, selector) {
