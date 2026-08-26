@@ -46,6 +46,45 @@ afterEach(() => {
   resetDomCache();
 });
 
+/**
+ * React-era live shape: the description sits in its own rails-partial
+ * BESIDE the engine's Timeline-partial container, not inside it.
+ */
+function buildSiblingPage() {
+  document.body.innerHTML = "";
+  const flow = document.createElement("div");
+  flow.className = "js-discussion";
+
+  const descGroup = document.createElement("div");
+  descGroup.className = "timeline-comment-group TimelineItem-body";
+  const desc = document.createElement("div");
+  desc.setAttribute("data-testid", "pull-request-description");
+  desc.textContent = "PR description";
+  descGroup.appendChild(desc);
+  const descWrap = document.createElement("div");
+  descWrap.className = "TimelineItem js-comment-container";
+  descWrap.appendChild(descGroup);
+  const descPartial = document.createElement("rails-partial");
+  descPartial.setAttribute("data-partial-name", "pullRequestsConversationsRoute.Description");
+  descPartial.appendChild(descWrap);
+  flow.appendChild(descPartial);
+
+  const container = document.createElement("rails-partial");
+  container.setAttribute("data-partial-name", "pullRequestsConversationsRoute.Timeline");
+  const item1 = document.createElement("div");
+  item1.className = "js-timeline-item";
+  item1.setAttribute("data-gid", "1");
+  const item2 = document.createElement("div");
+  item2.className = "js-timeline-item";
+  item2.setAttribute("data-gid", "2");
+  container.append(item1, item2);
+  flow.appendChild(container);
+
+  document.body.appendChild(flow);
+  resetDomCache();
+  return { flow, container, descPartial, item1, item2 };
+}
+
 describe("description descriptor", () => {
   it("resolves the direct-child wrapper", () => {
     const { container, descWrap } = buildPage();
@@ -100,5 +139,27 @@ describe("description descriptor", () => {
     buildPage();
     expect(descriptionDescriptor.recovery.expectedWhen({})).toBe(true);
     expect(descriptionDescriptor.recovery.landmark()).not.toBe(null);
+  });
+
+  it("live shape: resolves the sibling rails-partial beside the container", () => {
+    const { container, descPartial } = buildSiblingPage();
+    expect(descriptionDescriptor.resolve(container)).toBe(descPartial);
+  });
+
+  it("live shape: moves into the container and restores home on cleanup", () => {
+    const { flow, container, descPartial, item2 } = buildSiblingPage();
+    expect(
+      descriptionDescriptor.isPlaced(descPartial, container, "after", item2),
+    ).toBe(false);
+    descriptionDescriptor.place(descPartial, container, "after", item2);
+    expect(descPartial.parentElement).toBe(container);
+    expect(descPartial.previousSibling).toBe(item2);
+    expect(
+      descriptionDescriptor.isPlaced(descPartial, container, "after", item2),
+    ).toBe(true);
+
+    descriptionDescriptor.cleanup();
+    expect(descPartial.parentElement).toBe(flow);
+    expect(descPartial.hasAttribute("data-gqol-desc-section")).toBe(false);
   });
 });

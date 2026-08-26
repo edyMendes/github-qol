@@ -21,9 +21,14 @@ import { isPendingPostNavSwap } from "../../page.js";
 const descAnchors = new WeakMap();
 
 /**
- * The description's outermost wrapper that is a direct child of the
- * flow container, or null when the description lives elsewhere in the
- * DOM (or is not rendered yet).
+ * The description's top-level flow unit, or null when not rendered.
+ *
+ * Two live shapes: legacy — the unit is (possibly nested inside) the
+ * engine container, so the climb exits at `parent === container`; and
+ * React-era GitHub — the description sits in its own rails-partial
+ * BESIDE the engine's Timeline partial, so the climb exits just below
+ * a flow-stop landmark (.js-discussion). Either way the returned unit
+ * is movable into the container; the anchor puts it back on cleanup.
  */
 function resolveDescription(container) {
   if (!container) return null;
@@ -35,13 +40,14 @@ function resolveDescription(container) {
 
   let node = descContainer;
   while (node.parentElement && node.parentElement !== container) {
+    const parent = node.parentElement;
     if (
-      node.parentElement === document.body ||
-      node.parentElement.matches?.(TIMELINE_FLOW_STOP_SELECTOR)
+      parent === document.body ||
+      parent.matches?.(TIMELINE_FLOW_STOP_SELECTOR)
     ) {
-      return null;
+      return node;
     }
-    node = node.parentElement;
+    node = parent;
   }
   return node.parentElement === container ? node : null;
 }
