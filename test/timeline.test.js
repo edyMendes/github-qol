@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   getDirectTimelineItems,
-  resolveTimelineStream,
+  resolveTimelineStreamRegion,
   reverseTimelineContainer,
   restoreTimelineOrder,
 } from "../src/js/lib/timeline.js";
@@ -136,23 +136,22 @@ describe("restoreTimelineOrder", () => {
   });
 });
 
-describe("resolveTimelineStream", () => {
-  it("prefers direct container children (legacy DOM)", () => {
+describe("resolveTimelineStreamRegion", () => {
+  it("prefers direct container children (legacy DOM, mutation mode)", () => {
     const container = document.createElement("div");
     for (let i = 1; i <= 3; i++) {
       const item = document.createElement("div");
       item.className = "js-timeline-item";
       container.appendChild(item);
     }
-    const stream = resolveTimelineStream(container);
+    const stream = resolveTimelineStreamRegion(container);
+    expect(stream.nested).toBe(false);
     expect(stream.parent).toBe(container);
     expect(stream.selector).toBe(".js-timeline-item");
     expect(stream.items.length).toBe(3);
   });
 
-  it("finds the nested stream parent on React-era DOM", () => {
-    // The partial's only .js-timeline-item child is the focus wrapper;
-    // the real items are .TimelineItem elements inside an anonymous div.
+  it("nested stream: region is the single wrapper holding the items", () => {
     const partial = document.createElement("rails-partial");
     const focus = document.createElement("div");
     focus.className = "js-timeline-item js-timeline-progressive-focus-container";
@@ -165,18 +164,70 @@ describe("resolveTimelineStream", () => {
     }
     focus.appendChild(inner);
     partial.appendChild(focus);
-    const stream = resolveTimelineStream(partial);
-    expect(stream.parent).toBe(inner);
-    expect(stream.selector).toBe(".TimelineItem");
+
+    const stream = resolveTimelineStreamRegion(partial);
+    expect(stream.nested).toBe(true);
+    expect(stream.region).toBe(inner);
+    expect(stream.itemParents).toEqual([inner]);
     expect(stream.items.length).toBe(4);
   });
 
-  it("returns null until two items share a parent", () => {
+  it("grouped stream: region spans groups, itemParents list each group", () => {
+    const partial = document.createElement("rails-partial");
+    const region = document.createElement("div");
+
+    const logGroup = document.createElement("div");
+    const logItem = document.createElement("div");
+    logItem.className = "TimelineItem";
+    logItem.textContent = "added 19 commits";
+    logGroup.appendChild(logItem);
+
+    const commentsGroup = document.createElement("div");
+    for (let i = 1; i <= 3; i++) {
+      const item = document.createElement("div");
+      item.className = "TimelineItem";
+      item.setAttribute("data-gid", String(i));
+      commentsGroup.appendChild(item);
+    }
+
+    region.append(logGroup, commentsGroup);
+    partial.appendChild(region);
+
+    const stream = resolveTimelineStreamRegion(partial);
+    expect(stream.nested).toBe(true);
+    expect(stream.region).toBe(region);
+    expect(stream.itemParents).toEqual([logGroup, commentsGroup]);
+    expect(stream.items.length).toBe(4);
+  });
+
+  it("clamps the region to null when it resolves to the container itself", () => {
+    // Groups sit as direct children of the partial: a container flip
+    // would invert moved sections too, so only per-group flips apply.
+    const partial = document.createElement("rails-partial");
+    for (let g = 0; g < 2; g++) {
+      const group = document.createElement("div");
+      for (let i = 0; i < 2; i++) {
+        const item = document.createElement("div");
+        item.className = "TimelineItem";
+        group.appendChild(item);
+      }
+      partial.appendChild(group);
+    }
+    const stream = resolveTimelineStreamRegion(partial);
+    expect(stream.nested).toBe(true);
+    expect(stream.region).toBe(null);
+    expect(stream.itemParents.length).toBe(2);
+  });
+
+  it("returns null until two leaf items exist", () => {
     const container = document.createElement("div");
+    const wrapper = document.createElement("div");
+    wrapper.className = "js-timeline-item js-timeline-progressive-focus-container";
     const lone = document.createElement("div");
-    lone.className = "js-timeline-item";
-    container.appendChild(lone);
-    expect(resolveTimelineStream(container)).toBe(null);
+    lone.className = "TimelineItem";
+    wrapper.appendChild(lone);
+    container.appendChild(wrapper);
+    expect(resolveTimelineStreamRegion(container)).toBe(null);
   });
 
   it("ignores the marked description unit", () => {
@@ -188,7 +239,7 @@ describe("resolveTimelineStream", () => {
     const b = document.createElement("div");
     a.className = b.className = "js-timeline-item";
     container.append(desc, a, b);
-    const stream = resolveTimelineStream(container);
+    const stream = resolveTimelineStreamRegion(container);
     expect(stream.items.length).toBe(2);
     expect(stream.items).not.toContain(desc);
   });

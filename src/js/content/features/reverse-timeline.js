@@ -6,7 +6,7 @@
 
 import {
   getDirectTimelineItems,
-  resolveTimelineStream,
+  resolveTimelineStreamRegion,
   restoreTimelineOrder,
   reverseTimelineContainer,
   setVisualReversal,
@@ -50,6 +50,33 @@ function streamSelectorFor(parent) {
     TIMELINE_ITEM_SELECTORS.find(
       (selector) => getDirectTimelineItems(parent, selector).length >= 2,
     ) ?? TIMELINE_ITEM_SELECTORS[0]
+  );
+}
+
+/**
+ * Elements that must carry the visual reversal class in nested mode:
+ * the region (flips group order) plus every item parent (flips order
+ * inside each group). Deduped and clamped-null-free.
+ */
+function visualHolders(stream) {
+  if (!stream.nested) return [stream.parent];
+  return [...new Set([stream.region, ...stream.itemParents].filter(Boolean))];
+}
+
+/**
+ * True when the current stream resolution is fully reversed: legacy
+ * mutation mode marks with the attribute only; nested visual mode
+ * requires class + attribute on every holder (self-heals a class
+ * React wiped and new groups streamed without one).
+ */
+function isStreamApplied(stream) {
+  if (!stream.nested) {
+    return stream.parent.getAttribute(REVERSED_ATTR) === "1";
+  }
+  return visualHolders(stream).every(
+    (holder) =>
+      holder.classList.contains(TIMELINE_REVERSED_CLASS) &&
+      holder.getAttribute(REVERSED_ATTR) === "1",
   );
 }
 
@@ -158,17 +185,13 @@ async function applyReverseTimeline(enabled, settings) {
   }
 
   const container = findTimelineContainer();
-  const stream = container ? resolveTimelineStream(container) : null;
+  const stream = container ? resolveTimelineStreamRegion(container) : null;
   if (!container || !stream) {
     renderStatus(settings);
     return false;
   }
 
-  const applied = (s) =>
-    s.parent.getAttribute(REVERSED_ATTR) === "1" &&
-    (!s.nested || s.parent.classList.contains(TIMELINE_REVERSED_CLASS));
-
-  if (applied(stream)) {
+  if (isStreamApplied(stream)) {
     if (!stream.nested) {
       observeTimelineContainer(stream.parent, stream.selector);
     }
@@ -187,14 +210,18 @@ async function applyReverseTimeline(enabled, settings) {
     timelinePhase = "reversing";
     renderStatus(settings);
 
-    const streamNow = resolveTimelineStream(container) ?? stream;
+    const streamNow = resolveTimelineStreamRegion(container) ?? stream;
 
     if (streamNow.nested) {
       // React-owned stream: visual reversal only. Node moves here get
-      // reverted by React reconciliation (observed on live pages), and
-      // column-reverse also surfaces newly streamed items at the top
-      // with no observer work.
-      const changed = setVisualReversal(streamNow.parent, true);
+      // reverted by React reconciliation (observed on live pages).
+      // Region flips group order (comments vs reviews vs commit log);
+      // each item parent flips order inside its group. New groups
+      // streamed later surface via needsWork → re-apply.
+      let changed = false;
+      for (const holder of visualHolders(streamNow)) {
+        changed = setVisualReversal(holder, true) || changed;
+      }
       resetDomCache();
       return changed;
     }
@@ -221,15 +248,9 @@ function needsWorkReverseTimeline(settings) {
   if (settings.timelineOrder !== "newest") return false;
   const container = findTimelineContainer();
   if (!container) return false;
-  const stream = resolveTimelineStream(container);
+  const stream = resolveTimelineStreamRegion(container);
   if (stream) {
-    if (stream.nested) {
-      return !(
-        stream.parent.getAttribute(REVERSED_ATTR) === "1" &&
-        stream.parent.classList.contains(TIMELINE_REVERSED_CLASS)
-      );
-    }
-    return stream.parent.getAttribute(REVERSED_ATTR) !== "1";
+    return !isStreamApplied(stream);
   }
   return Boolean(timelineNeedsHydration(container));
 }
@@ -243,9 +264,9 @@ export function timelineStatus(settings) {
   if (settings.timelineOrder !== "newest" || !isPullRequestPage()) return null;
 
   const container = findTimelineContainer();
-  const stream = container ? resolveTimelineStream(container) : null;
+  const stream = container ? resolveTimelineStreamRegion(container) : null;
 
-  if (stream?.parent.getAttribute(REVERSED_ATTR) === "1") return null;
+  if (stream && isStreamApplied(stream)) return null;
 
   if (timelinePhase === "reversing") {
     return {

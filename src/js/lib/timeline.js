@@ -25,46 +25,96 @@ export function getDirectTimelineItems(container, selector) {
 export const TIMELINE_ITEM_SELECTORS = [".js-timeline-item", ".TimelineItem"];
 
 /**
- * Locate the timeline's item stream: the element whose direct children
- * ARE the stream items, plus the selector identifying them. Legacy DOM:
- * items are direct children of the flow container itself. React-era DOM:
- * the container's only .js-timeline-item child is a progressive-focus
- * wrapper and the real items are .TimelineItem elements nested deeper —
- * parent-voting over the candidates finds their shared parent. Returns
- * null until at least two items share a parent (nothing to order yet).
- * The marked description unit never counts as a stream item.
+ * Leaf timeline items under `container` for a selector: matches that
+ * contain no other match (group wrappers like the progressive-focus
+ * container collapse away — their inner items are the real stream).
+ * The marked description unit never counts.
  */
-export function resolveTimelineStream(container) {
+function leafTimelineItems(container, selector) {
+  const matches = [...container.querySelectorAll(selector)];
+  return matches.filter(
+    (el) =>
+      !el.hasAttribute(DESC_SECTION_ATTR) &&
+      !matches.some((other) => other !== el && el.contains(other)),
+  );
+}
+
+/**
+ * Deepest common ancestor of the items, walking up no further than
+ * `boundary` (or body). Null when the items share no in-page ancestor.
+ */
+function commonAncestor(items, boundary) {
+  let chain = null;
+  for (const item of items) {
+    const set = new Set();
+    for (let node = item.parentElement; node; node = node.parentElement) {
+      set.add(node);
+      if (node === boundary || node === document.body) break;
+    }
+    if (!chain) {
+      chain = set;
+    } else {
+      chain = new Set([...chain].filter((el) => set.has(el)));
+    }
+  }
+  return chain
+    ? [...chain].find((el) => el !== document.body) ?? null
+    : null;
+}
+
+function distinctParents(items) {
+  const parents = [];
+  for (const item of items) {
+    if (item.parentElement && !parents.includes(item.parentElement)) {
+      parents.push(item.parentElement);
+    }
+  }
+  return parents;
+}
+
+/**
+ * Locate the timeline stream for reversal.
+ *
+ * Legacy DOM: ≥2 items are direct children of the container → mutation
+ * mode (reverseTimelineContainer, gid save/restore).
+ *
+ * React-era DOM: the stream is fragmented into per-group wrappers
+ * (comments, reviews, the commits log, …). The region (deepest common
+ * ancestor of all leaf items) flips GROUP order; each item parent flips
+ * order INSIDE its group. Both are visual (CSS) — React reconciliation
+ * reverts DOM reorders of its subtrees. The region is clamped to null
+ * when it resolves to the container itself (or beyond): a container
+ * flip would also invert our moved sections and GitHub's action bar,
+ * so only per-group flips apply there.
+ *
+ * Returns null until at least two leaf items exist.
+ */
+export function resolveTimelineStreamRegion(container) {
   if (!container) return null;
+
   for (const selector of TIMELINE_ITEM_SELECTORS) {
     const items = getDirectTimelineItems(container, selector);
     if (items.length >= 2) {
-      return { parent: container, selector, items, nested: false };
+      return { nested: false, parent: container, selector, items };
     }
   }
+
   for (const selector of TIMELINE_ITEM_SELECTORS) {
-    const counts = new Map();
-    for (const item of container.querySelectorAll(selector)) {
-      if (item.hasAttribute(DESC_SECTION_ATTR)) continue;
-      const parent = item.parentElement;
-      if (parent) counts.set(parent, (counts.get(parent) ?? 0) + 1);
-    }
-    let best = null;
-    let bestCount = 0;
-    for (const [parent, count] of counts) {
-      if (count > bestCount) {
-        bestCount = count;
-        best = parent;
-      }
-    }
-    if (best && best !== container && bestCount >= 2) {
-      return {
-        parent: best,
-        selector,
-        items: getDirectTimelineItems(best, selector),
-        nested: true,
-      };
-    }
+    const leaves = leafTimelineItems(container, selector);
+    if (leaves.length < 2) continue;
+
+    const ancestor = commonAncestor(leaves, container);
+    const region =
+      ancestor && ancestor !== container && container.contains(ancestor)
+        ? ancestor
+        : null;
+    return {
+      nested: true,
+      region,
+      itemParents: distinctParents(leaves),
+      selector,
+      items: leaves,
+    };
   }
   return null;
 }

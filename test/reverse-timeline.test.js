@@ -244,3 +244,86 @@ describe("reverse-timeline: React-era stream shape", () => {
     expect(inner.classList.contains("gqol-timeline-reversed")).toBe(true);
   });
 });
+
+describe("reverse-timeline: grouped React stream (comments + commit log)", () => {
+  function buildGroupedPage() {
+    document.body.innerHTML = "";
+    const flow = document.createElement("div");
+    flow.className = "js-discussion";
+
+    const container = document.createElement("rails-partial");
+    container.setAttribute(
+      "data-partial-name",
+      "pullRequestsConversationsRoute.Timeline",
+    );
+    const region = document.createElement("div");
+
+    const logGroup = document.createElement("div");
+    const logItem = document.createElement("div");
+    logItem.className = "TimelineItem";
+    logItem.textContent = "added 19 commits";
+    logGroup.appendChild(logItem);
+
+    const commentsGroup = document.createElement("div");
+    for (let i = 1; i <= 3; i++) {
+      const item = document.createElement("div");
+      item.className = "TimelineItem";
+      item.setAttribute("data-gid", String(i));
+      item.textContent = `comment ${i}`;
+      commentsGroup.appendChild(item);
+    }
+
+    region.append(logGroup, commentsGroup);
+    container.appendChild(region);
+    flow.appendChild(container);
+    document.body.appendChild(flow);
+    resetDomCache();
+    return { flow, container, region, logGroup, commentsGroup };
+  }
+
+  it("classes the region AND every group; document order untouched", async () => {
+    const { region, logGroup, commentsGroup } = buildGroupedPage();
+    const result = await reverseTimelineFeature.apply(SETTINGS);
+    expect(result).toBe(true);
+    for (const holder of [region, logGroup, commentsGroup]) {
+      expect(holder.classList.contains("gqol-timeline-reversed")).toBe(true);
+      expect(holder.getAttribute(REVERSED_ATTR)).toBe("1");
+    }
+    // React-owned DOM: no node moves.
+    expect(region.children[0]).toBe(logGroup);
+    expect(region.children[1]).toBe(commentsGroup);
+    expect(logGroup.children[0].textContent).toBe("added 19 commits");
+  });
+
+  it("heals a group GitHub streams in after the first apply", async () => {
+    const { container, region, commentsGroup } = buildGroupedPage();
+    await reverseTimelineFeature.apply(SETTINGS);
+    expect(reverseTimelineFeature.needsWork(SETTINGS)).toBe(false);
+
+    // A new review group lands inside the region, unclassed.
+    const reviewGroup = document.createElement("div");
+    const reviewItem = document.createElement("div");
+    reviewItem.className = "TimelineItem";
+    reviewItem.textContent = "approved";
+    reviewGroup.appendChild(reviewItem);
+    region.insertBefore(reviewGroup, commentsGroup);
+    resetDomCache();
+
+    expect(reverseTimelineFeature.needsWork(SETTINGS)).toBe(true);
+    await reverseTimelineFeature.apply(SETTINGS);
+    expect(reviewGroup.classList.contains("gqol-timeline-reversed")).toBe(true);
+    expect(container.classList.contains("gqol-timeline-reversed")).toBe(false);
+  });
+
+  it("undo removes every class and attribute without touching order", async () => {
+    const { region, logGroup, commentsGroup } = buildGroupedPage();
+    await reverseTimelineFeature.apply(SETTINGS);
+    reverseTimelineFeature.reset();
+    for (const holder of [region, logGroup, commentsGroup]) {
+      expect(holder.classList.contains("gqol-timeline-reversed")).toBe(false);
+      expect(holder.hasAttribute(REVERSED_ATTR)).toBe(false);
+    }
+    expect(region.children[0]).toBe(logGroup);
+    expect(region.children[1]).toBe(commentsGroup);
+  });
+});
