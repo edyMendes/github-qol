@@ -16,6 +16,55 @@ export function getDirectTimelineItems(container, selector) {
   );
 }
 
+/**
+ * Item selectors probed in order: the legacy direct-child class first,
+ * then the React-era item class. The FIRST selector whose items share a
+ * parent wins, so legacy pages keep their exact-restore gids.
+ */
+export const TIMELINE_ITEM_SELECTORS = [".js-timeline-item", ".TimelineItem"];
+
+/**
+ * Locate the timeline's item stream: the element whose direct children
+ * ARE the stream items, plus the selector identifying them. Legacy DOM:
+ * items are direct children of the flow container itself. React-era DOM:
+ * the container's only .js-timeline-item child is a progressive-focus
+ * wrapper and the real items are .TimelineItem elements nested deeper —
+ * parent-voting over the candidates finds their shared parent. Returns
+ * null until at least two items share a parent (nothing to order yet).
+ * The marked description unit never counts as a stream item.
+ */
+export function resolveTimelineStream(container) {
+  if (!container) return null;
+  for (const selector of TIMELINE_ITEM_SELECTORS) {
+    const items = getDirectTimelineItems(container, selector);
+    if (items.length >= 2) return { parent: container, selector, items };
+  }
+  for (const selector of TIMELINE_ITEM_SELECTORS) {
+    const counts = new Map();
+    for (const item of container.querySelectorAll(selector)) {
+      if (item.hasAttribute(DESC_SECTION_ATTR)) continue;
+      const parent = item.parentElement;
+      if (parent) counts.set(parent, (counts.get(parent) ?? 0) + 1);
+    }
+    let best = null;
+    let bestCount = 0;
+    for (const [parent, count] of counts) {
+      if (count > bestCount) {
+        bestCount = count;
+        best = parent;
+      }
+    }
+    if (best && best !== container && bestCount >= 2) {
+      return {
+        parent: best,
+        selector,
+        items: getDirectTimelineItems(best, selector),
+      };
+    }
+  }
+  return null;
+}
+
 function saveTimelineGids(container, selector) {
   const items = getDirectTimelineItems(container, selector);
   const gids = items

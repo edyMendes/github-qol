@@ -155,3 +155,79 @@ describe("timelineStatus descriptor", () => {
     expect(descriptor.label).toBe("Preparing timeline…");
   });
 });
+
+describe("reverse-timeline: React-era stream shape", () => {
+  function buildReactPage({ itemCount = 3 } = {}) {
+    document.body.innerHTML = "";
+    const flow = document.createElement("div");
+    flow.className = "js-discussion";
+
+    const descGroup = document.createElement("div");
+    descGroup.className = "timeline-comment-group TimelineItem-body";
+    const desc = document.createElement("div");
+    desc.setAttribute("data-testid", "pull-request-description");
+    descGroup.appendChild(desc);
+    const descWrap = document.createElement("div");
+    descWrap.className = "TimelineItem js-comment-container";
+    descWrap.appendChild(descGroup);
+    const descPartial = document.createElement("rails-partial");
+    descPartial.setAttribute(
+      "data-partial-name",
+      "pullRequestsConversationsRoute.Description",
+    );
+    descPartial.appendChild(descWrap);
+    flow.appendChild(descPartial);
+
+    const container = document.createElement("rails-partial");
+    container.setAttribute(
+      "data-partial-name",
+      "pullRequestsConversationsRoute.Timeline",
+    );
+    const focus = document.createElement("div");
+    focus.className =
+      "js-timeline-item js-timeline-progressive-focus-container";
+    const inner = document.createElement("div");
+    for (let i = 1; i <= itemCount; i++) {
+      const item = document.createElement("div");
+      item.className = "TimelineItem";
+      item.setAttribute("data-gid", String(i));
+      item.textContent = `item ${i}`;
+      inner.appendChild(item);
+    }
+    focus.appendChild(inner);
+    container.appendChild(focus);
+    flow.appendChild(container);
+
+    document.body.appendChild(flow);
+    resetDomCache();
+    return { flow, container, inner };
+  }
+
+  it("reverses the nested .TimelineItem stream and marks its parent", async () => {
+    const { inner } = buildReactPage();
+    const result = await reverseTimelineFeature.apply(SETTINGS);
+    expect(result).toBe(true);
+    expect(inner.getAttribute(REVERSED_ATTR)).toBe("1");
+    const gidsInDom = [...inner.children].map((el) =>
+      el.getAttribute("data-gid"),
+    );
+    expect(gidsInDom).toEqual(["3", "2", "1"]);
+  });
+
+  it("reports no work after reversing the nested stream", async () => {
+    buildReactPage();
+    await reverseTimelineFeature.apply(SETTINGS);
+    expect(reverseTimelineFeature.needsWork(SETTINGS)).toBe(false);
+  });
+
+  it("restores the nested stream order on reset", async () => {
+    const { inner } = buildReactPage();
+    await reverseTimelineFeature.apply(SETTINGS);
+    reverseTimelineFeature.reset();
+    const gidsInDom = [...inner.children].map((el) =>
+      el.getAttribute("data-gid"),
+    );
+    expect(gidsInDom).toEqual(["1", "2", "3"]);
+    expect(inner.hasAttribute(REVERSED_ATTR)).toBe(false);
+  });
+});

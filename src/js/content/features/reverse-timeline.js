@@ -6,12 +6,13 @@
 
 import {
   getDirectTimelineItems,
+  resolveTimelineStream,
   restoreTimelineOrder,
   reverseTimelineContainer,
+  TIMELINE_ITEM_SELECTORS,
 } from "../../lib/timeline.js";
 import {
   findTimelineContainer,
-  getTimelineItems,
   resetDomCache,
 } from "../dom-cache.js";
 import { isPullRequestPage } from "../page.js";
@@ -26,7 +27,6 @@ import { renderStatus } from "../status.js";
 import {
   REVERSED_ATTR,
   SKELETON_SELECTOR,
-  TIMELINE_ITEM_SELECTOR,
 } from "../../lib/selectors.js";
 
 const HYDRATION_TICK_MS = 250;
@@ -34,28 +34,46 @@ const REORDER_DEBOUNCE_MS = 400;
 
 let timelineMutationObserver = null;
 let timelineMutationTimeout = null;
-let observedTimelineContainer = null;
+let observedStreamParent = null;
+let observedStreamSelector = null;
 
 // Feature-local phase state driving the status descriptor.
 let timelinePhase = null; // null | "hydrating" | "reversing"
 let hydrationStartedAt = 0;
 
-function observeTimelineContainer(container) {
-  if (!container) return;
-  if (observedTimelineContainer === container && timelineMutationObserver) return;
+/** The item selector matching ≥2 of parent's children, else the legacy one. */
+function streamSelectorFor(parent) {
+  return (
+    TIMELINE_ITEM_SELECTORS.find(
+      (selector) => getDirectTimelineItems(parent, selector).length >= 2,
+    ) ?? TIMELINE_ITEM_SELECTORS[0]
+  );
+}
+
+function observeTimelineContainer(streamParent, selector) {
+  if (!streamParent) return;
+  if (
+    observedStreamParent === streamParent &&
+    timelineMutationObserver &&
+    observedStreamSelector === selector
+  ) {
+    return;
+  }
 
   if (timelineMutationObserver) timelineMutationObserver.disconnect();
 
-  observedTimelineContainer = container;
+  observedStreamParent = streamParent;
+  observedStreamSelector = selector;
   timelineMutationObserver = new MutationObserver((mutations) => {
-    if (container.getAttribute(REVERSED_ATTR) !== "1") return;
+    if (streamParent.getAttribute(REVERSED_ATTR) !== "1") return;
 
     const addedItems = mutations
       .flatMap((mutation) => [...mutation.addedNodes])
       .filter(
         (node) =>
           node.nodeType === Node.ELEMENT_NODE &&
-          node.matches(TIMELINE_ITEM_SELECTOR),
+          node.matches(selector) &&
+          !node.hasAttribute("data-gqol-desc-section"),
       );
 
     if (addedItems.length === 0) return;
@@ -63,17 +81,17 @@ function observeTimelineContainer(container) {
     if (timelineMutationTimeout) clearTimeout(timelineMutationTimeout);
     timelineMutationTimeout = setTimeout(() => {
       timelineMutationTimeout = null;
-      const firstItem = getDirectTimelineItems(container, TIMELINE_ITEM_SELECTOR)[0];
+      const firstItem = getDirectTimelineItems(streamParent, selector)[0];
       for (const item of addedItems) {
         if (firstItem && item !== firstItem) {
-          container.insertBefore(item, firstItem);
+          streamParent.insertBefore(item, firstItem);
         }
       }
-      schedulePostChangeRetries(container);
+      schedulePostChangeRetries(streamParent);
     }, REORDER_DEBOUNCE_MS);
   });
 
-  timelineMutationObserver.observe(container, { childList: true });
+  timelineMutationObserver.observe(streamParent, { childList: true });
 }
 
 function hydrateTimeline(container, onProgress) {
@@ -110,13 +128,14 @@ function undoReverseTimeline() {
   }
 
   cancelPostChangeRetries();
-  observedTimelineContainer = null;
+  observedStreamParent = null;
+  observedStreamSelector = null;
   timelinePhase = null;
   hydrationStartedAt = 0;
 
-  document.querySelectorAll(`[${REVERSED_ATTR}="1"]`).forEach((container) => {
-    if (restoreTimelineOrder(container, TIMELINE_ITEM_SELECTOR)) {
-      schedulePostChangeRetries(container);
+  document.querySelectorAll(`[${REVERSED_ATTR}="1"]`).forEach((parent) => {
+    if (restoreTimelineOrder(parent, streamSelectorFor(parent))) {
+      schedulePostChangeRetries(parent);
     }
   });
   resetDomCache();
@@ -129,13 +148,14 @@ async function applyReverseTimeline(enabled, settings) {
   }
 
   const container = findTimelineContainer();
-  if (!container || getTimelineItems().length < 2) {
+  const stream = container ? resolveTimelineStream(container) : null;
+  if (!container || !stream) {
     renderStatus(settings);
     return false;
   }
 
-  if (container.getAttribute(REVERSED_ATTR) === "1") {
-    observeTimelineContainer(container);
+  if (stream.parent.getAttribute(REVERSED_ATTR) === "1") {
+    observeTimelineContainer(stream.parent, stream.selector);
     renderStatus(settings);
     return true;
   }
@@ -151,10 +171,14 @@ async function applyReverseTimeline(enabled, settings) {
     timelinePhase = "reversing";
     renderStatus(settings);
 
-    const reversed = reverseTimelineContainer(container, TIMELINE_ITEM_SELECTOR);
+    const streamNow = resolveTimelineStream(container) ?? stream;
+    const reversed = reverseTimelineContainer(
+      streamNow.parent,
+      streamNow.selector,
+    );
     if (reversed) {
-      schedulePostChangeRetries(container);
-      observeTimelineContainer(container);
+      schedulePostChangeRetries(streamNow.parent);
+      observeTimelineContainer(streamNow.parent, streamNow.selector);
     }
     resetDomCache();
 
@@ -169,12 +193,12 @@ async function applyReverseTimeline(enabled, settings) {
 function needsWorkReverseTimeline(settings) {
   if (settings.timelineOrder !== "newest") return false;
   const container = findTimelineContainer();
-  if (getTimelineItems().length >= 2) {
-    return Boolean(
-      container && container.getAttribute(REVERSED_ATTR) !== "1",
-    );
+  if (!container) return false;
+  const stream = resolveTimelineStream(container);
+  if (stream) {
+    return stream.parent.getAttribute(REVERSED_ATTR) !== "1";
   }
-  return Boolean(container && timelineNeedsHydration(container));
+  return Boolean(timelineNeedsHydration(container));
 }
 
 /**
@@ -186,9 +210,9 @@ export function timelineStatus(settings) {
   if (settings.timelineOrder !== "newest" || !isPullRequestPage()) return null;
 
   const container = findTimelineContainer();
-  const items = getTimelineItems();
+  const stream = container ? resolveTimelineStream(container) : null;
 
-  if (container?.getAttribute(REVERSED_ATTR) === "1") return null;
+  if (stream?.parent.getAttribute(REVERSED_ATTR) === "1") return null;
 
   if (timelinePhase === "reversing") {
     return {
@@ -217,10 +241,10 @@ export function timelineStatus(settings) {
     };
   }
 
-  if (items.length < 2) {
+  if (!stream) {
     return {
       label: "Waiting for timeline…",
-      progress: items.length === 0 ? 14 : 26,
+      progress: 14,
       indeterminate: true,
     };
   }
