@@ -36,10 +36,6 @@ const DESCRIPTORS = new Map(
   ),
 );
 
-// The recovery declaration's isPresent() has no settings argument; the
-// engine remembers the last-applied settings for it.
-let lastAppliedSettings = null;
-
 function rankedIds(order, mode) {
   const timelineIndex = order.indexOf("timeline");
   return mode === "before"
@@ -104,7 +100,6 @@ function applyAfterZone(container, order) {
 function applySectionOrder(settings) {
   const container = findTimelineContainer();
   if (!container) return false;
-  lastAppliedSettings = settings;
 
   let didWork = applyAfterZone(container, settings.sectionOrder);
   didWork = applyBeforeZone(container, settings.sectionOrder) || didWork;
@@ -160,14 +155,15 @@ function expectedRecovery(settings) {
   );
 }
 
-function recoveryPresent() {
-  // Before the first apply pass nothing has been laid out, so no
-  // landmark can be expected yet (the orchestrator probes isPresent()
-  // during updateSeenElements ahead of the first apply).
-  if (!lastAppliedSettings) return true;
+function recoveryPresent(settings) {
+  // Landmarks are native elements (description container, merge box
+  // partial, comment form) — they resolve whether or not anything has
+  // been laid out yet, so a page whose expected sections never rendered
+  // reads as "not present" from the very first probe and can never be
+  // mistaken for a dropped subtree.
   return [...DESCRIPTORS.values()].every(
     (descriptor) =>
-      !descriptor.recovery?.expectedWhen(lastAppliedSettings) ||
+      !descriptor.recovery?.expectedWhen(settings) ||
       Boolean(descriptor.recovery.landmark()),
   );
 }

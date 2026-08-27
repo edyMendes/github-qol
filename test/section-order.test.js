@@ -187,9 +187,21 @@ describe("section-order feature", () => {
     buildPage();
     sectionOrderFeature.apply(DEFAULTS);
     expect(sectionOrderFeature.recovery.expectedWhen(DEFAULTS)).toBe(true);
-    expect(sectionOrderFeature.recovery.isPresent()).toBe(true);
+    expect(sectionOrderFeature.recovery.isPresent(DEFAULTS)).toBe(true);
     document.querySelector('[data-testid="mergebox-partial"]').remove();
     resetDomCache();
-    expect(sectionOrderFeature.recovery.isPresent()).toBe(false);
+    expect(sectionOrderFeature.recovery.isPresent(DEFAULTS)).toBe(false);
+  });
+
+  it("reports recovery as not present when an expected section never rendered", () => {
+    // A page with no merge box at all (e.g. permission-limited PRs): the
+    // engine must read "not present" from the very first probe, before
+    // any apply pass — otherwise the orchestrator could mistake the page
+    // for a dropped subtree and reload it.
+    const { stack } = buildPage();
+    stack.remove();
+    resetDomCache();
+    expect(sectionOrderFeature.recovery.expectedWhen(DEFAULTS)).toBe(true);
+    expect(sectionOrderFeature.recovery.isPresent(DEFAULTS)).toBe(false);
   });
 });

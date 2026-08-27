@@ -18,7 +18,7 @@
  * - recovery [optional]: declares an element whose disappearance after
  *                    being seen (with the DOM settled) means GitHub
  *                    dropped our moved subtree — the page reloads once:
- *                    { expectedWhen(settings), isPresent() }.
+ *                    { expectedWhen(settings), isPresent(settings) }.
  *
  * Apply order is the array order; teardown runs reversed. Adding a
  * feature means adding one object here, not editing four call sites.
@@ -166,7 +166,7 @@ function updateSeenElements(settings) {
     if (!feature.recovery) continue;
     if (!feature.recovery.expectedWhen(settings)) continue;
     if (seenOnPage.get(feature.name)) continue;
-    if (feature.recovery.isPresent()) seenOnPage.set(feature.name, true);
+    if (feature.recovery.isPresent(settings)) seenOnPage.set(feature.name, true);
   }
 }
 
@@ -181,7 +181,7 @@ function maybeRecoverCorruptedPage(settings) {
   if (msSinceNavigation() < RECOVERY_MIN_DELAY_MS) return false;
   for (const feature of FEATURES) {
     if (!feature.recovery?.expectedWhen(settings)) continue;
-    if (seenOnPage.get(feature.name) && !feature.recovery.isPresent()) {
+    if (seenOnPage.get(feature.name) && !feature.recovery.isPresent(settings)) {
       return reloadOncePerKey();
     }
   }
