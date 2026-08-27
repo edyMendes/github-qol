@@ -7,6 +7,7 @@ import {
 } from "../src/js/content/orchestrator.js";
 import { resetDomCache } from "../src/js/content/dom-cache.js";
 import { invalidateCachedSettings } from "../src/js/content/settings-cache.js";
+import { requestRevalidate } from "../src/js/content/bus.js";
 import { STORAGE_KEY, DEFAULT_SETTINGS } from "../src/js/settings.js";
 
 /**
@@ -166,6 +167,43 @@ afterEach(async () => {
 });
 
 describe("orchestrator reapply lifecycle after back-navigation", () => {
+  it("tears everything down when the master toggle turns off, and re-applies when it flips back on", async () => {
+    history.pushState(null, "", PR_URL);
+    buildConversationDom();
+    init();
+    await vi.advanceTimersByTimeAsync(PROBE_MS);
+
+    expect(document.querySelector(".gqol-mergebox-timeline-row")).not.toBeNull();
+    expect(document.querySelector(".gqol-comment-box-at-top")).not.toBeNull();
+    expect(document.documentElement.getAttribute("data-gqol-active")).toBe("1");
+
+    // Toggle off via storage (what the popup's switch writes) — the
+    // storage listener invalidates the cache and revalidates.
+    await chrome.storage.sync.set({
+      [STORAGE_KEY]: { ...DEFAULT_SETTINGS, enabled: false },
+    });
+    invalidateCachedSettings();
+    requestRevalidate();
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(document.querySelector(".gqol-mergebox-timeline-row")).toBeNull();
+    expect(document.querySelector(".gqol-comment-box-at-top")).toBeNull();
+    expect(document.querySelector("[data-gqol-reverse]")).toBeNull();
+    expect(document.documentElement.getAttribute("data-gqol-active")).toBeNull();
+
+    // Toggle back on: the revalidate pass applies everything again.
+    await chrome.storage.sync.set({
+      [STORAGE_KEY]: { ...DEFAULT_SETTINGS },
+    });
+    invalidateCachedSettings();
+    requestRevalidate();
+    await vi.advanceTimersByTimeAsync(PROBE_MS + 1000);
+
+    expect(document.querySelector(".gqol-mergebox-timeline-row")).not.toBeNull();
+    expect(document.querySelector(".gqol-comment-box-at-top")).not.toBeNull();
+    expect(document.documentElement.getAttribute("data-gqol-active")).toBe("1");
+  });
+
   it("re-applies the merge box and comment box when the fresh render swaps the cached page", async () => {
     history.pushState(null, "", PR_URL);
     buildConversationDom();

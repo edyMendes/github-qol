@@ -35,7 +35,7 @@ describe("SETTING_DEFINITIONS", () => {
 
   it("keeps the popupControlled marking in sync with definitions", () => {
     const popupKeys = SETTING_DEFINITIONS.filter((d) => d.popupControlled);
-    expect(popupKeys.map((d) => d.key)).toEqual(["collapsePrDescription"]);
+    expect(popupKeys.map((d) => d.key)).toEqual(["enabled", "collapsePrDescription"]);
   });
 
   it("declares enum and sectionOrder values", () => {
@@ -62,6 +62,7 @@ describe("normalizeSettings", () => {
         sectionOrder: ["timeline", "description", "commentBox", "mergebox"],
       }),
     ).toEqual({
+      enabled: true,
       timelineOrder: "oldest",
       collapsePrDescription: false,
       hideCopilotBanner: false,
@@ -149,7 +150,13 @@ describe("normalizeSettings: legacy contraction", () => {
   it("drops legacy booleans from the output", () => {
     const s = normalizeSettings({ reverseTimeline: false, commentBoxAtTop: false });
     expect(Object.keys(s).sort()).toEqual(
-      ["collapsePrDescription", "sectionOrder", "timelineOrder", "hideCopilotBanner"].sort(),
+      [
+        "collapsePrDescription",
+        "enabled",
+        "hideCopilotBanner",
+        "sectionOrder",
+        "timelineOrder",
+      ].sort(),
     );
     expect(s.timelineOrder).toBe("oldest");
     expect(s.sectionOrder).toEqual(["description", "mergebox", "timeline", "commentBox"]);

@@ -313,6 +313,16 @@ async function runApplyPass() {
   resetDomCache();
   const settings = await getCachedSettings();
 
+  // Master toggle off: restore the native page and stand down entirely.
+  // The storage listener revalidates when it flips back on, and the
+  // navigation handler keeps watching in case the toggle changes while
+  // no PR page is open.
+  if (!settings.enabled) {
+    teardownOnNonPrPage();
+    cancelInitialRetries();
+    return false;
+  }
+
   if (await domUnsettled()) {
     ensureRetriesAndObserver();
     return false;

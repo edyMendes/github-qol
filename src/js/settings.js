@@ -19,6 +19,7 @@ const DEFAULT_SECTION_ORDER = [...SECTION_IDS];
  * latter at the top so no one's description jumps below the timeline.
  */
 export const SETTING_DEFINITIONS = [
+  { key: "enabled", type: "boolean", default: true, popupControlled: true },
   { key: "timelineOrder", type: "enum", values: TIMELINE_ORDERS, default: "newest", popupControlled: false },
   { key: "sectionOrder", type: "sectionOrder", values: SECTION_IDS, default: DEFAULT_SECTION_ORDER, popupControlled: false },
   { key: "collapsePrDescription", type: "boolean", default: true, popupControlled: true },
