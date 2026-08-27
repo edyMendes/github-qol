@@ -48,51 +48,59 @@ function descriptorFor(id) {
 }
 
 /**
- * Before-zone: iterate ranks from LAST to FIRST, keeping the previous
- * iteration's outer element as the insertion anchor (successor anchor).
- * place() returns the outer element now in the slot (it may differ from
- * the resolved element, e.g. the mergebox row wrap) — always advance the
- * anchor with that return value, never a stale pre-place reference.
+ * A zone's section ids in visit order. The before-zone walks ranks from
+ * LAST to FIRST (the rank closest to the timeline places first, against
+ * the first timeline item itself); the after-zone walks FIRST to LAST
+ * from the last timeline item. Both run inside-out, keeping the previous
+ * section's outer element as the insertion anchor.
  */
-function applyBeforeZone(container, order) {
-  let didWork = false;
-  let anchor = findFirstTimelineItemChild(container);
+function zoneIds(order, mode) {
+  const ids = rankedIds(order, mode);
+  return mode === "before" ? [...ids].reverse() : ids;
+}
 
-  for (let i = rankedIds(order, "before").length - 1; i >= 0; i--) {
-    const descriptor = descriptorFor(rankedIds(order, "before")[i]);
-    if (!descriptor) continue;
-    const el = descriptor.resolve(container);
-    if (!el) continue;
-    if (!descriptor.isPlaced(el, container, "before", anchor)) {
-      descriptor.place(el, container, "before", anchor);
-      didWork = true;
-    }
-    // Re-resolve: place may have wrapped the element (row).
-    anchor = descriptor.resolve(container) ?? anchor;
-  }
-  return didWork;
+/** The anchor a zone starts from: the first (before) or last (after)
+ *  direct timeline item — null when the stream has not rendered yet. */
+function zoneStartAnchor(container, mode) {
+  if (mode === "before") return findFirstTimelineItemChild(container);
+  const items = getDirectTimelineItems(container, TIMELINE_ITEM_SELECTOR);
+  return items[items.length - 1] ?? null;
 }
 
 /**
- * After-zone: iterate ranks from FIRST to LAST, keeping the previous
- * iteration's outer element as the insertion anchor (predecessor
- * anchor), starting at the last timeline item.
+ * One walk per zone, shared by apply and needsWork so the two can never
+ * drift apart. For each section in visit order: resolve it, check
+ * isPlaced against the running anchor, and — when applying — place it.
+ *
+ * place() returns the outer element now occupying the slot (it may
+ * differ from the resolved element, e.g. the mergebox row wrap); the
+ * walk always advances the anchor with that value, never a stale
+ * pre-place reference. In check mode (place=false) the first pending or
+ * misplaced section short-circuits to true.
+ *
+ * Returns whether work happened (apply) or remains (check).
  */
-function applyAfterZone(container, order) {
+function runZone(container, order, mode, place) {
   let didWork = false;
-  const items = getDirectTimelineItems(container, TIMELINE_ITEM_SELECTOR);
-  let anchor = items[items.length - 1] ?? null;
+  let anchor = zoneStartAnchor(container, mode);
 
-  for (const id of rankedIds(order, "after")) {
+  for (const id of zoneIds(order, mode)) {
     const descriptor = descriptorFor(id);
     if (!descriptor) continue;
     const el = descriptor.resolve(container);
-    if (!el) continue;
-    if (!descriptor.isPlaced(el, container, "after", anchor)) {
-      descriptor.place(el, container, "after", anchor);
-      didWork = true;
+    if (!el) {
+      // An absent section is pending work only while GitHub may still
+      // be swapping the restored page in (descriptor.pendingWhenMissing).
+      if (!place && descriptor.pendingWhenMissing?.()) return true;
+      continue;
     }
-    anchor = descriptor.resolve(container) ?? anchor;
+    if (descriptor.isPlaced(el, container, mode, anchor)) {
+      anchor = el;
+      continue;
+    }
+    if (!place) return true;
+    didWork = true;
+    anchor = descriptor.place(el, container, mode, anchor);
   }
   return didWork;
 }
@@ -101,8 +109,8 @@ function applySectionOrder(settings) {
   const container = findTimelineContainer();
   if (!container) return false;
 
-  let didWork = applyAfterZone(container, settings.sectionOrder);
-  didWork = applyBeforeZone(container, settings.sectionOrder) || didWork;
+  let didWork = runZone(container, settings.sectionOrder, "after", true);
+  didWork = runZone(container, settings.sectionOrder, "before", true) || didWork;
 
   resetDomCache();
   return didWork;
@@ -112,34 +120,10 @@ function needsWorkSectionOrder(settings) {
   const container = findTimelineContainer();
   if (!container) return false;
 
-  let anchor = findFirstTimelineItemChild(container);
-  for (let i = rankedIds(settings.sectionOrder, "before").length - 1; i >= 0; i--) {
-    const descriptor = descriptorFor(rankedIds(settings.sectionOrder, "before")[i]);
-    if (!descriptor) continue;
-    const el = descriptor.resolve(container);
-    if (!el) {
-      if (descriptor.pendingWhenMissing?.()) return true;
-      continue;
-    }
-    if (!descriptor.isPlaced(el, container, "before", anchor)) return true;
-    anchor = el;
-  }
-
-  const items = getDirectTimelineItems(container, TIMELINE_ITEM_SELECTOR);
-  anchor = items[items.length - 1] ?? null;
-  for (const id of rankedIds(settings.sectionOrder, "after")) {
-    const descriptor = descriptorFor(id);
-    if (!descriptor) continue;
-    const el = descriptor.resolve(container);
-    if (!el) {
-      if (descriptor.pendingWhenMissing?.()) return true;
-      continue;
-    }
-    if (!descriptor.isPlaced(el, container, "after", anchor)) return true;
-    anchor = el;
-  }
-
-  return false;
+  return (
+    runZone(container, settings.sectionOrder, "before", false) ||
+    runZone(container, settings.sectionOrder, "after", false)
+  );
 }
 
 function resetSectionOrder() {
