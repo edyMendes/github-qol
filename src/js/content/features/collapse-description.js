@@ -14,7 +14,7 @@ import { MARKDOWN_BODY_SELECTOR } from "../../lib/selectors.js";
 import {
   COLLAPSE_FOOTER_CLASS,
   createCollapseBlock,
-  unwrapCollapseBlock,
+  unwrapAllCollapseBlocks,
 } from "../collapse-block.js";
 
 const DESC_COLLAPSED_CLASS = "gqol-desc-collapsed";
@@ -116,39 +116,19 @@ function collapseDescription(body) {
 }
 
 function restoreBodyElement(body) {
+  if (!body) return;
   body.classList.remove(DESC_COLLAPSED_CLASS);
   body.removeAttribute(DESC_PROCESSED_ATTR);
   body.removeAttribute(DESC_EXPANDED_ATTR);
 }
 
-/**
- * Put the original body element back in place of our block/wrap container.
- * `fallbackToFirstChild` covers bare wraps (body may be the first child);
- * blocks resolve the body through their inner wrap instead.
- */
-function unwrapCollapsedContainer(container, fallbackToFirstChild) {
-  const body = unwrapCollapseBlock(container, {
+function undoCollapseDescription() {
+  unwrapAllCollapseBlocks({
+    blockSelector: `.${DESC_BLOCK_CLASS}`,
+    wrapSelector: `.${DESC_WRAP_CLASS}`,
     expandedAttr: DESC_EXPANDED_ATTR,
     bodySelector: MARKDOWN_BODY_SELECTOR,
-    fallbackToFirstChild,
-  });
-  if (body) {
-    restoreBodyElement(body);
-  }
-}
-
-function undoCollapseDescription() {
-  document.querySelectorAll(`.${DESC_BLOCK_CLASS}`).forEach((block) => {
-    unwrapCollapsedContainer(block, false);
-  });
-
-  document.querySelectorAll(`.${COLLAPSE_FOOTER_CLASS}`).forEach((footer) => {
-    if (!footer.closest(`.${DESC_BLOCK_CLASS}`)) footer.remove();
-  });
-
-  document.querySelectorAll(`.${DESC_WRAP_CLASS}`).forEach((wrap) => {
-    if (wrap.closest(`.${DESC_BLOCK_CLASS}`)) return;
-    unwrapCollapsedContainer(wrap, true);
+    restoreBody: restoreBodyElement,
   });
   resetDomCache();
 }

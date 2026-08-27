@@ -14,11 +14,9 @@ import { isMarkdownLoaded, isTallBody } from "../description.js";
 import { findDescriptionContainer, findTimelineContainer, resetDomCache } from "../dom-cache.js";
 import { DESC_SECTION_ATTR, MARKDOWN_BODY_SELECTOR } from "../../lib/selectors.js";
 import {
-  COLLAPSE_BLOCK_CLASS,
   COLLAPSE_FOOTER_CLASS,
-  COLLAPSE_WRAP_CLASS,
   createCollapseBlock,
-  unwrapCollapseBlock,
+  unwrapAllCollapseBlocks,
 } from "../collapse-block.js";
 
 const COMMENT_BLOCK_CLASS = "gqol-comment-block";
@@ -46,6 +44,20 @@ function findCommentBodies(container) {
   });
 }
 
+/**
+ * Unprocessed, fully-loaded comment bodies in `container` — the shared
+ * candidate scan for apply and needsWork. Cheap checks only; the
+ * reflow-forcing height measurement stays with the callers.
+ */
+function* loadableCommentBodies(container) {
+  for (const body of findCommentBodies(container)) {
+    if (body.closest(`.${COMMENT_BLOCK_CLASS}`)) continue;
+    if (body.getAttribute(COMMENT_PROCESSED_ATTR) === "1") continue;
+    if (!isMarkdownLoaded(body)) continue;
+    yield body;
+  }
+}
+
 function applyCollapseComments(enabled) {
   if (!enabled) {
     undoCollapseComments();
@@ -56,12 +68,9 @@ function applyCollapseComments(enabled) {
   if (!container) return false;
 
   let didWork = false;
-  for (const body of findCommentBodies(container)) {
-    if (body.closest(`.${COMMENT_BLOCK_CLASS}`)) continue;
-    if (body.getAttribute(COMMENT_PROCESSED_ATTR) === "1") continue;
-    if (!isMarkdownLoaded(body)) continue;
-
+  for (const body of loadableCommentBodies(container)) {
     if (!isTallBody(body)) {
+      // A loaded-but-short body is never re-measured.
       body.setAttribute(COMMENT_PROCESSED_ATTR, "1");
       continue;
     }
@@ -90,39 +99,25 @@ function needsWorkCollapseComments(settings) {
   }
   const container = findTimelineContainer();
   if (!container) return false;
-  for (const body of findCommentBodies(container)) {
-    if (body.closest(`.${COMMENT_BLOCK_CLASS}`)) continue;
-    if (body.getAttribute(COMMENT_PROCESSED_ATTR) === "1") continue;
-    if (!isMarkdownLoaded(body)) continue;
+  for (const body of loadableCommentBodies(container)) {
     // The only reflow in the whole scan — after every cheap check.
     if (isTallBody(body)) return true;
   }
   return false;
 }
 
+function restoreCommentBody(body) {
+  body?.classList.remove(COMMENT_COLLAPSED_CLASS);
+  body?.removeAttribute(COMMENT_PROCESSED_ATTR);
+}
+
 function undoCollapseComments() {
-  document.querySelectorAll(`.${COMMENT_BLOCK_CLASS}`).forEach((block) => {
-    const body = unwrapCollapseBlock(block, {
-      expandedAttr: COMMENT_EXPANDED_ATTR,
-      bodySelector: MARKDOWN_BODY_SELECTOR,
-    });
-    body?.classList.remove(COMMENT_COLLAPSED_CLASS);
-    body?.removeAttribute(COMMENT_PROCESSED_ATTR);
-  });
-
-  document.querySelectorAll(`.${COLLAPSE_FOOTER_CLASS}`).forEach((footer) => {
-    if (!footer.closest(`.${COLLAPSE_BLOCK_CLASS}`)) footer.remove();
-  });
-
-  document.querySelectorAll(`.${COMMENT_WRAP_CLASS}`).forEach((wrap) => {
-    if (wrap.closest(`.${COLLAPSE_BLOCK_CLASS}`)) return;
-    const body = unwrapCollapseBlock(wrap, {
-      expandedAttr: COMMENT_EXPANDED_ATTR,
-      bodySelector: MARKDOWN_BODY_SELECTOR,
-      fallbackToFirstChild: true,
-    });
-    body?.classList.remove(COMMENT_COLLAPSED_CLASS);
-    body?.removeAttribute(COMMENT_PROCESSED_ATTR);
+  unwrapAllCollapseBlocks({
+    blockSelector: `.${COMMENT_BLOCK_CLASS}`,
+    wrapSelector: `.${COMMENT_WRAP_CLASS}`,
+    expandedAttr: COMMENT_EXPANDED_ATTR,
+    bodySelector: MARKDOWN_BODY_SELECTOR,
+    restoreBody: restoreCommentBody,
   });
   resetDomCache();
 }

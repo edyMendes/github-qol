@@ -148,3 +148,38 @@ export function unwrapCollapseBlock(
   container.remove();
   return null;
 }
+
+/**
+ * Undo every collapse structure tagged with the feature's hook classes:
+ * blocks first (their body resolves through the inner wrap), then bare
+ * wraps (body may be the container's first child), with `restoreBody`
+ * stripping the feature's own markers from each restored body. Footers
+ * left outside any collapse block are removed — footers inside another
+ * feature's still-standing block belong to it and are left alone.
+ */
+export function unwrapAllCollapseBlocks({
+  blockSelector,
+  wrapSelector,
+  expandedAttr,
+  bodySelector,
+  restoreBody = () => {},
+} = {}) {
+  document.querySelectorAll(blockSelector).forEach((block) => {
+    restoreBody(unwrapCollapseBlock(block, { expandedAttr, bodySelector }));
+  });
+
+  document.querySelectorAll(`.${COLLAPSE_FOOTER_CLASS}`).forEach((footer) => {
+    if (!footer.closest(`.${COLLAPSE_BLOCK_CLASS}`)) footer.remove();
+  });
+
+  document.querySelectorAll(wrapSelector).forEach((wrap) => {
+    if (wrap.closest(`.${COLLAPSE_BLOCK_CLASS}`)) return;
+    restoreBody(
+      unwrapCollapseBlock(wrap, {
+        expandedAttr,
+        bodySelector,
+        fallbackToFirstChild: true,
+      }),
+    );
+  });
+}
