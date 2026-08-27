@@ -327,3 +327,110 @@ describe("reverse-timeline: grouped React stream (comments + commit log)", () =>
     expect(region.children[1]).toBe(commentsGroup);
   });
 });
+
+describe("reverse-timeline: commit rollup rows inside the log group", () => {
+  function buildRollupPage() {
+    document.body.innerHTML = "";
+    const flow = document.createElement("div");
+    flow.className = "js-discussion";
+
+    const container = document.createElement("rails-partial");
+    container.setAttribute(
+      "data-partial-name",
+      "pullRequestsConversationsRoute.Timeline",
+    );
+    const region = document.createElement("div");
+
+    const logGroup = document.createElement("div");
+    const logItem = document.createElement("div");
+    logItem.className = "TimelineItem";
+    const header = document.createElement("div");
+    header.textContent = "edyMendes added 20 commits 2 days ago";
+    const rowList = document.createElement("div");
+    const shas = [
+      "7e85c67", "c989b10", "cf22578", "1d40ec7", "47122fe", "8339203",
+    ];
+    for (const sha of shas) {
+      const row = document.createElement("div");
+      const cell = document.createElement("div");
+      const code = document.createElement("code");
+      code.textContent = sha;
+      cell.appendChild(code);
+      row.appendChild(cell);
+      rowList.appendChild(row);
+    }
+    logItem.append(header, rowList);
+    logGroup.appendChild(logItem);
+
+    const commentsGroup = document.createElement("div");
+    for (let i = 1; i <= 2; i++) {
+      const item = document.createElement("div");
+      item.className = "TimelineItem";
+      item.setAttribute("data-gid", String(i));
+      item.textContent = `comment ${i}`;
+      commentsGroup.appendChild(item);
+    }
+
+    region.append(logGroup, commentsGroup);
+    container.appendChild(region);
+    flow.appendChild(container);
+    document.body.appendChild(flow);
+    resetDomCache();
+    return { region, logGroup, logItem, rowList, commentsGroup };
+  }
+
+  it("flips the rollup row list without moving any nodes", async () => {
+    const { region, logGroup, rowList } = buildRollupPage();
+    const result = await reverseTimelineFeature.apply(SETTINGS);
+    expect(result).toBe(true);
+    for (const holder of [region, logGroup, rowList]) {
+      expect(holder.classList.contains("gqol-timeline-reversed")).toBe(true);
+      expect(holder.getAttribute(REVERSED_ATTR)).toBe("1");
+    }
+    // Document order untouched (React owns these nodes).
+    const shasInDom = [...rowList.querySelectorAll("code")].map(
+      (c) => c.textContent,
+    );
+    expect(shasInDom[0]).toBe("7e85c67");
+    expect(shasInDom.at(-1)).toBe("8339203");
+  });
+
+  it("undo unstyles the rollup list too", async () => {
+    const { rowList } = buildRollupPage();
+    await reverseTimelineFeature.apply(SETTINGS);
+    reverseTimelineFeature.reset();
+    expect(rowList.classList.contains("gqol-timeline-reversed")).toBe(false);
+    expect(rowList.hasAttribute(REVERSED_ATTR)).toBe(false);
+  });
+
+  it("re-heals when React wipes the rollup class", async () => {
+    const { rowList } = buildRollupPage();
+    await reverseTimelineFeature.apply(SETTINGS);
+    rowList.classList.remove("gqol-timeline-reversed");
+    expect(reverseTimelineFeature.needsWork(SETTINGS)).toBe(true);
+    await reverseTimelineFeature.apply(SETTINGS);
+    expect(rowList.classList.contains("gqol-timeline-reversed")).toBe(true);
+  });
+
+  it("never flips SHA-looking code inside comment markdown", async () => {
+    const { commentsGroup } = buildRollupPage();
+    // A comment quoting two SHAs in a code block — like the rollup, but
+    // living in a comment item, not a commits-log item.
+    const comment = commentsGroup.children[0];
+    const md = document.createElement("div");
+    for (const sha of ["abc1234", "def5678"]) {
+      const p = document.createElement("p");
+      const code = document.createElement("code");
+      code.textContent = sha;
+      p.appendChild(code);
+      md.appendChild(p);
+    }
+    comment.appendChild(md);
+    resetDomCache();
+
+    await reverseTimelineFeature.apply(SETTINGS);
+    expect(md.classList.contains("gqol-timeline-reversed")).toBe(false);
+    expect(comment.classList.contains("gqol-timeline-reversed")).toBe(false);
+    expect(commentsGroup.classList.contains("gqol-timeline-reversed")).toBe(true);
+  });
+});

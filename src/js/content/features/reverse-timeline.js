@@ -55,12 +55,56 @@ function streamSelectorFor(parent) {
 
 /**
  * Elements that must carry the visual reversal class in nested mode:
- * the region (flips group order) plus every item parent (flips order
- * inside each group). Deduped and clamped-null-free.
+ * the region (flips group order), every item parent (flips order
+ * inside each group), and the commit-rollup row lists (the SHAs listed
+ * under "added N commits" are not timeline items — they are found by
+ * their SHA-bearing elements and flipped as rows). Deduped, no nulls.
  */
 function visualHolders(stream) {
   if (!stream.nested) return [stream.parent];
-  return [...new Set([stream.region, ...stream.itemParents].filter(Boolean))];
+  const holders = [stream.region, ...stream.itemParents].filter(Boolean);
+  for (const item of stream.items) {
+    if (COMMIT_ROLLUP_ITEM_PATTERN.test(item.textContent || "")) {
+      holders.push(...commitRollupRowLists(item));
+    }
+  }
+  return [...new Set(holders)];
+}
+
+const COMMIT_ROLLUP_ITEM_PATTERN = /added\s+\d+\s+commits/i;
+const SHA_TEXT_PATTERN = /^[0-9a-f]{7,40}$/i;
+
+/** The outermost ancestor of `el` still inside `boundary` (or null). */
+function outermostWithin(el, boundary) {
+  let node = el;
+  while (node.parentElement && node.parentElement !== boundary) {
+    node = node.parentElement;
+  }
+  return node.parentElement === boundary ? node : null;
+}
+
+/**
+ * Containers inside a commits-log item whose children are the commit
+ * rows: every SHA-bearing element climbs to its outermost wrapper
+ * within the item — that is the shared row list — and lists carrying
+ * at least two rows get flipped. Class-agnostic by design (the rollup
+ * carries no stable selector across React renders).
+ */
+function commitRollupRowLists(item) {
+  const shaEls = [
+    ...item.querySelectorAll('code, [class*="sha" i], [data-testid*="sha" i]'),
+  ].filter((el) => SHA_TEXT_PATTERN.test((el.textContent || "").trim()));
+
+  const counts = new Map();
+  for (const el of shaEls) {
+    const list = outermostWithin(el, item);
+    if (list && list !== item) {
+      counts.set(list, (counts.get(list) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .filter(([, count]) => count >= 2)
+    .map(([list]) => list);
 }
 
 /**
