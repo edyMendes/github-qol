@@ -5,6 +5,7 @@
  */
 
 import {
+  commonAncestor,
   getDirectTimelineItems,
   resolveTimelineStreamRegion,
   restoreTimelineOrder,
@@ -74,37 +75,24 @@ function visualHolders(stream) {
 const COMMIT_ROLLUP_ITEM_PATTERN = /added\s+\d+\s+commits/i;
 const SHA_TEXT_PATTERN = /^[0-9a-f]{7,40}$/i;
 
-/** The outermost ancestor of `el` still inside `boundary` (or null). */
-function outermostWithin(el, boundary) {
-  let node = el;
-  while (node.parentElement && node.parentElement !== boundary) {
-    node = node.parentElement;
-  }
-  return node.parentElement === boundary ? node : null;
-}
-
 /**
  * Containers inside a commits-log item whose children are the commit
- * rows: every SHA-bearing element climbs to its outermost wrapper
- * within the item — that is the shared row list — and lists carrying
- * at least two rows get flipped. Class-agnostic by design (the rollup
- * carries no stable selector across React renders).
+ * rows. The rollup carries no stable selector across React renders, so
+ * the SHA chips are found by TEXT: every descendant element whose entire
+ * text is a bare SHA. Their deepest common ancestor is the shared row
+ * list (the header text is never an ancestor of a chip, so it can never
+ * be dragged into the flip). Scoped to commits-log items only —
+ * SHA-like code inside comment markdown lives in other items.
  */
 function commitRollupRowLists(item) {
-  const shaEls = [
-    ...item.querySelectorAll('code, [class*="sha" i], [data-testid*="sha" i]'),
-  ].filter((el) => SHA_TEXT_PATTERN.test((el.textContent || "").trim()));
+  const chips = [...item.querySelectorAll("*")].filter((el) =>
+    SHA_TEXT_PATTERN.test((el.textContent || "").trim()),
+  );
+  if (chips.length < 2) return [];
 
-  const counts = new Map();
-  for (const el of shaEls) {
-    const list = outermostWithin(el, item);
-    if (list && list !== item) {
-      counts.set(list, (counts.get(list) ?? 0) + 1);
-    }
-  }
-  return [...counts.entries()]
-    .filter(([, count]) => count >= 2)
-    .map(([list]) => list);
+  const lca = commonAncestor(chips, item);
+  if (!lca || lca === item || !item.contains(lca)) return [];
+  return [lca];
 }
 
 /**

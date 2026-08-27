@@ -43,7 +43,7 @@ function leafTimelineItems(container, selector) {
  * Deepest common ancestor of the items, walking up no further than
  * `boundary` (or body). Null when the items share no in-page ancestor.
  */
-function commonAncestor(items, boundary) {
+export function commonAncestor(items, boundary) {
   let chain = null;
   for (const item of items) {
     const set = new Set();

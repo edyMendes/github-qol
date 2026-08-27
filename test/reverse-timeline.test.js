@@ -344,22 +344,27 @@ describe("reverse-timeline: commit rollup rows inside the log group", () => {
     const logGroup = document.createElement("div");
     const logItem = document.createElement("div");
     logItem.className = "TimelineItem";
+    // Realistic shape: a body wrapper between the item and the list —
+    // the flip must land on the ROW LIST, never the wrapper (which also
+    // contains the header).
+    const bodyWrapper = document.createElement("div");
     const header = document.createElement("div");
-    header.textContent = "edyMendes added 20 commits 2 days ago";
+    header.textContent = "edyMendes added 20 commits 3 days ago";
     const rowList = document.createElement("div");
     const shas = [
       "7e85c67", "c989b10", "cf22578", "1d40ec7", "47122fe", "8339203",
     ];
     for (const sha of shas) {
       const row = document.createElement("div");
-      const cell = document.createElement("div");
-      const code = document.createElement("code");
-      code.textContent = sha;
-      cell.appendChild(code);
-      row.appendChild(cell);
+      const title = document.createElement("span");
+      title.textContent = `commit ${sha}`;
+      const chip = document.createElement("span");
+      chip.textContent = sha;
+      row.append(title, chip);
       rowList.appendChild(row);
     }
-    logItem.append(header, rowList);
+    bodyWrapper.append(header, rowList);
+    logItem.appendChild(bodyWrapper);
     logGroup.appendChild(logItem);
 
     const commentsGroup = document.createElement("div");
@@ -376,21 +381,23 @@ describe("reverse-timeline: commit rollup rows inside the log group", () => {
     flow.appendChild(container);
     document.body.appendChild(flow);
     resetDomCache();
-    return { region, logGroup, logItem, rowList, commentsGroup };
+    return { region, logGroup, logItem, bodyWrapper, rowList, commentsGroup };
   }
 
   it("flips the rollup row list without moving any nodes", async () => {
-    const { region, logGroup, rowList } = buildRollupPage();
+    const { region, logGroup, bodyWrapper, rowList } = buildRollupPage();
     const result = await reverseTimelineFeature.apply(SETTINGS);
     expect(result).toBe(true);
     for (const holder of [region, logGroup, rowList]) {
       expect(holder.classList.contains("gqol-timeline-reversed")).toBe(true);
       expect(holder.getAttribute(REVERSED_ATTR)).toBe("1");
     }
+    // The body wrapper also carries the header — it must NOT flip.
+    expect(bodyWrapper.classList.contains("gqol-timeline-reversed")).toBe(false);
     // Document order untouched (React owns these nodes).
-    const shasInDom = [...rowList.querySelectorAll("code")].map(
-      (c) => c.textContent,
-    );
+    const shasInDom = [...rowList.querySelectorAll("span")]
+      .filter((el) => /^[0-9a-f]{7}$/.test(el.textContent))
+      .map((el) => el.textContent);
     expect(shasInDom[0]).toBe("7e85c67");
     expect(shasInDom.at(-1)).toBe("8339203");
   });
