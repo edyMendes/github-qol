@@ -17,6 +17,15 @@
  * already-correct anchor keeps one pass correct for fresh pages; a
  * within-zone rank swap can need a follow-up pass, which needsWork
  * reports and the orchestrator's retry ladder re-applies.
+ *
+ * Zone anchors assume the legacy DOM shape: timeline items as direct
+ * children of the container carrying .js-timeline-item
+ * (TIMELINE_ITEM_SELECTOR / findFirstTimelineItemChild). The React-era
+ * grouped stream — reverse-timeline's nested mode, where items sit in
+ * per-group wrappers — does not expose that shape; on such pages the
+ * anchors resolve to null and sections append at the container's end.
+ * GitHub currently serves the legacy shape on PR conversation pages;
+ * revisit if that changes.
  */
 
 import { getDirectTimelineItems } from "../../lib/timeline.js";

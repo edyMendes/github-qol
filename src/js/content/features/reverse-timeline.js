@@ -27,6 +27,7 @@ import {
 } from "../hydration.js";
 import { renderStatus } from "../status.js";
 import {
+  DESC_SECTION_ATTR,
   REVERSED_ATTR,
   SKELETON_SELECTOR,
   TIMELINE_GIDS_ATTR,
@@ -55,15 +56,26 @@ function streamSelectorFor(parent) {
 }
 
 /**
- * Elements that must carry the visual reversal class in nested mode:
- * the region (flips group order), every item parent (flips order
- * inside each group), and the commit-rollup row lists (the SHAs listed
- * under "added N commits" are not timeline items — they are found by
- * their SHA-bearing elements and flipped as rows). Deduped, no nulls.
+ * The cheap holders of a nested stream: the region (flips group order)
+ * and every item parent (flips order inside each group). Deduped, no
+ * nulls — resolved without any subtree scans.
+ */
+function structuralHolders(stream) {
+  if (!stream.nested) return [stream.parent];
+  return [...new Set([stream.region, ...stream.itemParents].filter(Boolean))];
+}
+
+/**
+ * Every element that must carry the visual reversal class in nested
+ * mode: the structural holders plus the commit-rollup row lists (the
+ * SHAs listed under "added N commits" are not timeline items — they are
+ * found by their SHA-bearing elements and flipped as rows). Finding the
+ * rollup lists walks each commits-log item's full subtree — keep this
+ * off hot paths that can decide from the structural holders alone.
  */
 function visualHolders(stream) {
   if (!stream.nested) return [stream.parent];
-  const holders = [stream.region, ...stream.itemParents].filter(Boolean);
+  const holders = structuralHolders(stream);
   for (const item of stream.items) {
     if (COMMIT_ROLLUP_ITEM_PATTERN.test(item.textContent || "")) {
       holders.push(...commitRollupRowLists(item));
@@ -95,21 +107,28 @@ function commitRollupRowLists(item) {
   return [lca];
 }
 
+function holderIsReversed(holder) {
+  return (
+    holder.classList.contains(TIMELINE_REVERSED_CLASS) &&
+    holder.getAttribute(REVERSED_ATTR) === "1"
+  );
+}
+
 /**
  * True when the current stream resolution is fully reversed: legacy
  * mutation mode marks with the attribute only; nested visual mode
  * requires class + attribute on every holder (self-heals a class
- * React wiped and new groups streamed without one).
+ * React wiped and new groups streamed without one). The structural
+ * holders are checked first — while any of them is unmarked the answer
+ * is false without paying for the rollup subtree scans (this predicate
+ * runs on every apply pass, needsWork and status tick).
  */
 function isStreamApplied(stream) {
   if (!stream.nested) {
     return stream.parent.getAttribute(REVERSED_ATTR) === "1";
   }
-  return visualHolders(stream).every(
-    (holder) =>
-      holder.classList.contains(TIMELINE_REVERSED_CLASS) &&
-      holder.getAttribute(REVERSED_ATTR) === "1",
-  );
+  if (!structuralHolders(stream).every(holderIsReversed)) return false;
+  return visualHolders(stream).every(holderIsReversed);
 }
 
 function observeTimelineContainer(streamParent, selector) {
@@ -135,7 +154,7 @@ function observeTimelineContainer(streamParent, selector) {
         (node) =>
           node.nodeType === Node.ELEMENT_NODE &&
           node.matches(selector) &&
-          !node.hasAttribute("data-gqol-desc-section"),
+          !node.hasAttribute(DESC_SECTION_ATTR),
       );
 
     if (addedItems.length === 0) return;
