@@ -2,7 +2,6 @@
  * Feature: collapse long PR descriptions behind a Show more toggle.
  */
 
-import { chevronDownIcon, chevronUpIcon } from "../../lib/icons.js";
 import {
   getDescriptionBody,
   getDescriptionElement,
@@ -12,6 +11,11 @@ import { isDescriptionBodyLoading, isDescriptionLoading, isTallBody } from "../d
 import { nudgeDescription } from "../hydration.js";
 import { requestRevalidate } from "../bus.js";
 import { MARKDOWN_BODY_SELECTOR } from "../../lib/selectors.js";
+import {
+  COLLAPSE_FOOTER_CLASS,
+  createCollapseBlock,
+  unwrapCollapseBlock,
+} from "../collapse-block.js";
 
 const DESC_COLLAPSED_CLASS = "gqol-desc-collapsed";
 const DESC_WRAP_CLASS = "gqol-desc-wrap";
@@ -24,13 +28,6 @@ const DESC_EXPANDED_ATTR = "data-gqol-desc-expanded";
 
 let descriptionObserver = null;
 let descriptionObservedEl = null;
-
-function renderToggleButton(button, expanded) {
-  button.setAttribute("aria-expanded", expanded ? "true" : "false");
-  button.innerHTML = expanded
-    ? `${chevronUpIcon("gqol-desc-toggle-icon")}<span>Show less</span>`
-    : `${chevronDownIcon("gqol-desc-toggle-icon")}<span>Show more</span>`;
-}
 
 function alignFooterText(block, body) {
   const footer = block.querySelector(`.${DESC_FOOTER_CLASS}`);
@@ -90,49 +87,24 @@ function collapseDescription(body) {
     return false;
   }
 
-  const block = document.createElement("div");
-  block.className = DESC_BLOCK_CLASS;
-
-  const wrap = document.createElement("div");
-  wrap.className = DESC_WRAP_CLASS;
-
-  const parent = body.parentNode;
-  parent?.insertBefore(block, body);
-  block.appendChild(wrap);
-  wrap.appendChild(body);
-
-  body.classList.add(DESC_COLLAPSED_CLASS);
-  wrap.classList.add(DESC_COLLAPSED_CLASS);
-  body.setAttribute(DESC_PROCESSED_ATTR, "1");
-  body.setAttribute(DESC_EXPANDED_ATTR, "false");
-
-  const footer = document.createElement("div");
-  footer.className = DESC_FOOTER_CLASS;
-
-  const toggle = document.createElement("button");
-  toggle.type = "button";
-  toggle.className = DESC_TOGGLE_CLASS;
-  renderToggleButton(toggle, false);
-
-  toggle.addEventListener("click", () => {
-    const expanded = body.getAttribute(DESC_EXPANDED_ATTR) !== "true";
-    body.setAttribute(DESC_EXPANDED_ATTR, expanded ? "true" : "false");
-    block.classList.toggle("gqol-desc-block--expanded", expanded);
-
-    if (expanded) {
-      body.classList.remove(DESC_COLLAPSED_CLASS);
-      wrap.classList.remove(DESC_COLLAPSED_CLASS);
-    } else {
-      body.classList.add(DESC_COLLAPSED_CLASS);
-      wrap.classList.add(DESC_COLLAPSED_CLASS);
-      requestAnimationFrame(() => scrollDescriptionIntoView(block));
-    }
-
-    renderToggleButton(toggle, expanded);
+  const block = createCollapseBlock(body, {
+    expandedAttr: DESC_EXPANDED_ATTR,
+    toggleClass: DESC_TOGGLE_CLASS,
+    blockHookClass: DESC_BLOCK_CLASS,
+    wrapHookClass: DESC_WRAP_CLASS,
+    collapsedHookClass: DESC_COLLAPSED_CLASS,
+    // Description-specific: scroll back to the block when re-collapsing.
+    onToggle: (expanding, el) => {
+      if (!expanding) {
+        requestAnimationFrame(() => scrollDescriptionIntoView(el));
+      }
+    },
   });
 
-  footer.appendChild(toggle);
-  block.appendChild(footer);
+  const footer = block.querySelector(`.${COLLAPSE_FOOTER_CLASS}`);
+  footer?.classList.add(DESC_FOOTER_CLASS);
+
+  body.setAttribute(DESC_PROCESSED_ATTR, "1");
 
   requestAnimationFrame(() => {
     alignFooterText(block, body);
@@ -155,15 +127,13 @@ function restoreBodyElement(body) {
  * blocks resolve the body through their inner wrap instead.
  */
 function unwrapCollapsedContainer(container, fallbackToFirstChild) {
-  const wrapped = container.querySelector(`.${DESC_WRAP_CLASS}`)?.firstElementChild;
-  const body =
-    container.querySelector(MARKDOWN_BODY_SELECTOR) ??
-    (fallbackToFirstChild ? container.firstElementChild : wrapped);
+  const body = unwrapCollapseBlock(container, {
+    expandedAttr: DESC_EXPANDED_ATTR,
+    bodySelector: MARKDOWN_BODY_SELECTOR,
+    fallbackToFirstChild,
+  });
   if (body) {
     restoreBodyElement(body);
-    container.replaceWith(body);
-  } else {
-    container.remove();
   }
 }
 
@@ -172,7 +142,9 @@ function undoCollapseDescription() {
     unwrapCollapsedContainer(block, false);
   });
 
-  document.querySelectorAll(`.${DESC_TOGGLE_CLASS}`).forEach((el) => el.remove());
+  document.querySelectorAll(`.${COLLAPSE_FOOTER_CLASS}`).forEach((footer) => {
+    if (!footer.closest(`.${DESC_BLOCK_CLASS}`)) footer.remove();
+  });
 
   document.querySelectorAll(`.${DESC_WRAP_CLASS}`).forEach((wrap) => {
     if (wrap.closest(`.${DESC_BLOCK_CLASS}`)) return;

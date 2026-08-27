@@ -11,6 +11,7 @@ function buildOptionsDom() {
       <button data-direction="oldest">Oldest first</button>
     </fieldset>
     <input data-setting="collapsePrDescription" type="checkbox" />
+    <input data-setting="collapseLongComments" type="checkbox" />
     <input data-setting="hideCopilotBanner" type="checkbox" />
     <p id="options-status"></p>
   `;
@@ -131,6 +132,22 @@ describe("options page", () => {
     await vi.waitFor(async () => {
       const settings = await getSettings();
       expect(settings.collapsePrDescription).toBe(false);
+    });
+  });
+
+  it("persists the comment collapse toggle", async () => {
+    await importOptions();
+    await vi.waitFor(() => {
+      expect(document.querySelectorAll(SECTION_ROW_SELECTOR).length).toBe(4);
+    });
+
+    const input = document.querySelector('[data-setting="collapseLongComments"]');
+    input.checked = false;
+    input.dispatchEvent(new Event("change"));
+
+    await vi.waitFor(async () => {
+      const settings = await getSettings();
+      expect(settings.collapseLongComments).toBe(false);
     });
   });
 

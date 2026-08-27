@@ -65,6 +65,7 @@ describe("normalizeSettings", () => {
       enabled: true,
       timelineOrder: "oldest",
       collapsePrDescription: false,
+      collapseLongComments: true,
       hideCopilotBanner: false,
       sectionOrder: ["timeline", "description", "commentBox", "mergebox"],
     });
@@ -151,6 +152,7 @@ describe("normalizeSettings: legacy contraction", () => {
     const s = normalizeSettings({ reverseTimeline: false, commentBoxAtTop: false });
     expect(Object.keys(s).sort()).toEqual(
       [
+        "collapseLongComments",
         "collapsePrDescription",
         "enabled",
         "hideCopilotBanner",

@@ -1,22 +1,22 @@
-/* PR description collapse — uses GitHub Primer tokens when available */
+/* Collapsible blocks (description + comments) — GitHub Primer tokens */
 
-.gqol-desc-block {
+.gqol-collapse-block {
   margin: 0;
   scroll-margin-top: var(--header-height, 4rem);
 }
 
-.gqol-desc-wrap {
+.gqol-collapse-wrap {
   position: relative;
 }
 
-.gqol-desc-wrap .markdown-body.gqol-desc-collapsed,
-.gqol-desc-wrap .js-comment-body.gqol-desc-collapsed {
+.gqol-collapse-wrap .markdown-body.gqol-collapse-collapsed,
+.gqol-collapse-wrap .js-comment-body.gqol-collapse-collapsed {
   max-height: 10.5rem;
   overflow: hidden;
   margin-bottom: 0;
 }
 
-.gqol-desc-wrap.gqol-desc-collapsed::after {
+.gqol-collapse-wrap.gqol-collapse-collapsed::after {
   content: "";
   position: absolute;
   left: 0;
@@ -31,9 +31,9 @@
   );
 }
 
-[data-color-mode="dark"] .gqol-desc-wrap.gqol-desc-collapsed::after,
-.dark .gqol-desc-wrap.gqol-desc-collapsed::after,
-html.dark .gqol-desc-wrap.gqol-desc-collapsed::after {
+[data-color-mode="dark"] .gqol-collapse-wrap.gqol-collapse-collapsed::after,
+.dark .gqol-collapse-wrap.gqol-collapse-collapsed::after,
+html.dark .gqol-collapse-wrap.gqol-collapse-collapsed::after {
   background: linear-gradient(
     to bottom,
     transparent,
@@ -41,11 +41,11 @@ html.dark .gqol-desc-wrap.gqol-desc-collapsed::after {
   );
 }
 
-.gqol-desc-block--expanded .gqol-desc-wrap::after {
+.gqol-collapse-block--expanded .gqol-collapse-wrap::after {
   display: none;
 }
 
-.gqol-desc-footer {
+.gqol-collapse-footer {
   display: flex;
   justify-content: flex-start;
   margin-top: var(--base-size-8, 8px);
@@ -56,15 +56,20 @@ html.dark .gqol-desc-wrap.gqol-desc-collapsed::after {
   border-top: 1px solid var(--borderColor-muted, var(--color-border-muted, #d0d7de));
 }
 
-[data-color-mode="dark"] .gqol-desc-footer,
-.dark .gqol-desc-footer,
-html.dark .gqol-desc-footer {
+[data-color-mode="dark"] .gqol-collapse-footer,
+.dark .gqol-collapse-footer,
+html.dark .gqol-collapse-footer {
   border-top-color: var(--borderColor-muted, var(--color-border-muted, #30363d));
 }
 
-.gqol-desc-toggle {
+/* Show more / Show less toggle — structured like GitHub's Primer button
+   (data-component spans) with our own classes styled from Primer design
+   tokens; Primer's hashed CSS-module classes rotate across deploys. */
+
+.gqol-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--base-size-4, 4px);
   margin: 0;
   padding: var(--base-size-4, 4px) var(--base-size-8, 8px);
@@ -72,8 +77,8 @@ html.dark .gqol-desc-footer {
   font-size: var(--text-body-size-small, 12px);
   font-weight: var(--base-text-weight-medium, 500);
   line-height: var(--text-body-lineHeight-small, 18px);
-  color: var(--fgColor-accent, var(--color-accent-fg, #0969da));
-  background-color: var(--button-default-bgColor-rest, transparent);
+  color: var(--fgColor-default, var(--color-fg-default, #1f2328));
+  background-color: var(--button-default-bgColor-rest, var(--color-canvas-subtle, #f6f8fa));
   border: 1px solid var(--borderColor-default, var(--color-border-default, #d0d7de));
   border-radius: var(--borderRadius-medium, 6px);
   cursor: pointer;
@@ -83,14 +88,15 @@ html.dark .gqol-desc-footer {
     border-color 0.12s ease;
 }
 
-[data-color-mode="dark"] .gqol-desc-toggle,
-.dark .gqol-desc-toggle,
-html.dark .gqol-desc-toggle {
-  color: var(--fgColor-accent, var(--color-accent-fg, #4493f8));
+[data-color-mode="dark"] .gqol-btn,
+.dark .gqol-btn,
+html.dark .gqol-btn {
+  color: var(--fgColor-default, var(--color-fg-default, #e6edf3));
+  background-color: var(--button-default-bgColor-rest, var(--color-canvas-subtle, #212830));
   border-color: var(--borderColor-default, var(--color-border-default, #30363d));
 }
 
-.gqol-desc-toggle:hover {
+.gqol-btn:hover {
   background-color: var(
     --button-default-bgColor-hover,
     var(--color-btn-hover-bg, rgba(208, 215, 222, 0.32))
@@ -99,12 +105,36 @@ html.dark .gqol-desc-toggle {
   text-decoration: none;
 }
 
-.gqol-desc-toggle:focus-visible {
+[data-color-mode="dark"] .gqol-btn:hover,
+.dark .gqol-btn:hover,
+html.dark .gqol-btn:hover {
+  background-color: var(
+    --button-default-bgColor-hover,
+    var(--color-btn-hover-bg, rgba(110, 118, 129, 0.1))
+  );
+  border-color: var(--borderColor-accent-emphasis, var(--color-accent-emphasis, #1f6feb));
+}
+
+.gqol-btn:focus-visible {
   outline: 2px solid var(--focus-outlineColor, var(--color-accent-fg, #0969da));
   outline-offset: 2px;
 }
 
-.gqol-desc-toggle-icon {
+.gqol-btn__content {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--base-size-4, 4px);
+}
+
+.gqol-btn__visual {
+  display: inline-flex;
+}
+
+.gqol-btn__label {
+  white-space: nowrap;
+}
+
+.gqol-btn__icon {
   flex-shrink: 0;
   fill: currentColor;
 }

@@ -40,6 +40,7 @@ import {
 } from "./status.js";
 import { registerBus } from "./bus.js";
 import collapseDescription from "./features/collapse-description.js";
+import collapseComments from "./features/collapse-comments.js";
 import sectionOrder from "./features/section-order.js";
 import reverseTimeline from "./features/reverse-timeline.js";
 import hideCopilot from "./features/hide-copilot.js";
@@ -80,9 +81,16 @@ const RECOVERY_MARKER_PREFIX = "gqol-reloaded:";
 
 // Apply order matters: collapse first (reads the description in place),
 // then the section layout (moves whole sections around the stream),
-// then the reversal (reorders the stream the sections surround), and
-// finally the copilot-banner hide (independent of all placement).
-const FEATURES = [collapseDescription, sectionOrder, reverseTimeline, hideCopilot];
+// then the reversal (reorders the stream the sections surround), then
+// the copilot-banner hide, and finally comment collapsing (works inside
+// settled items, independent of all placement).
+const FEATURES = [
+  collapseDescription,
+  sectionOrder,
+  reverseTimeline,
+  hideCopilot,
+  collapseComments,
+];
 
 let globalMutationObserver = null;
 let observerSettledAt = null;

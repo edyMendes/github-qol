@@ -157,6 +157,19 @@ hideCopilotInput?.addEventListener("change", async () => {
   }
 });
 
+const collapseCommentsInput = document.querySelector(
+  '[data-setting="collapseLongComments"]',
+);
+collapseCommentsInput?.addEventListener("change", async () => {
+  try {
+    await saveSettings({ collapseLongComments: collapseCommentsInput.checked });
+    showStatus("Saved");
+  } catch (error) {
+    console.error("GitHub QoL options:", error);
+    showStatus("Could not save");
+  }
+});
+
 (async () => {
   const settings = await getSettings();
   currentOrder = settings.sectionOrder.filter((id) =>
@@ -166,6 +179,9 @@ hideCopilotInput?.addEventListener("change", async () => {
   renderDirection(settings.timelineOrder);
   if (collapseInput) collapseInput.checked = Boolean(settings.collapsePrDescription);
   if (hideCopilotInput) hideCopilotInput.checked = Boolean(settings.hideCopilotBanner);
+  if (collapseCommentsInput) {
+    collapseCommentsInput.checked = Boolean(settings.collapseLongComments);
+  }
 })().catch((error) => {
   console.error("GitHub QoL options:", error);
   showStatus("Could not load settings");
