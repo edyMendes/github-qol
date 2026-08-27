@@ -1,8 +1,9 @@
+import { getSettings } from "./settings.js";
 import {
-  getSettings,
-  saveSettings,
-  SECTION_IDS,
-} from "./settings.js";
+  bindSettingCheckbox,
+  createStatusFlash,
+  saveSetting,
+} from "./settings-ui.js";
 
 const SECTION_LABELS = {
   description: "PR description",
@@ -15,29 +16,17 @@ const statusEl = document.getElementById("options-status");
 const listEl = document.getElementById("section-list");
 const directionEl = document.getElementById("direction");
 
-let statusTimeout = null;
+const showStatus = createStatusFlash(statusEl);
+
 let saveTimeout = null;
 let currentOrder = [];
 
-function showStatus(message) {
-  statusEl.textContent = message;
-  if (statusTimeout) clearTimeout(statusTimeout);
-  statusTimeout = setTimeout(() => {
-    statusEl.textContent = "";
-  }, 1500);
-}
-
 function scheduleSave() {
   if (saveTimeout) clearTimeout(saveTimeout);
-  saveTimeout = setTimeout(async () => {
-    try {
-      await saveSettings({ sectionOrder: currentOrder });
-      showStatus("Saved");
-    } catch (error) {
-      console.error("GitHub QoL options:", error);
-      showStatus("Could not save");
-    }
-  }, 300);
+  saveTimeout = setTimeout(
+    () => saveSetting({ sectionOrder: currentOrder }, showStatus),
+    300,
+  );
 }
 
 function renderList() {
@@ -119,68 +108,28 @@ function renderDirection(timelineOrder) {
 }
 
 for (const button of directionEl.querySelectorAll("[data-direction]")) {
-  button.addEventListener("click", async () => {
+  button.addEventListener("click", () => {
     renderDirection(button.dataset.direction);
-    try {
-      await saveSettings({ timelineOrder: button.dataset.direction });
-      showStatus("Saved");
-    } catch (error) {
-      console.error("GitHub QoL options:", error);
-      showStatus("Could not save");
-    }
+    saveSetting({ timelineOrder: button.dataset.direction }, showStatus);
   });
 }
 
-const collapseInput = document.querySelector(
-  '[data-setting="collapsePrDescription"]',
-);
-collapseInput?.addEventListener("change", async () => {
-  try {
-    await saveSettings({ collapsePrDescription: collapseInput.checked });
-    showStatus("Saved");
-  } catch (error) {
-    console.error("GitHub QoL options:", error);
-    showStatus("Could not save");
-  }
-});
-
-const hideCopilotInput = document.querySelector(
-  '[data-setting="hideCopilotBanner"]',
-);
-hideCopilotInput?.addEventListener("change", async () => {
-  try {
-    await saveSettings({ hideCopilotBanner: hideCopilotInput.checked });
-    showStatus("Saved");
-  } catch (error) {
-    console.error("GitHub QoL options:", error);
-    showStatus("Could not save");
-  }
-});
-
-const collapseCommentsInput = document.querySelector(
-  '[data-setting="collapseLongComments"]',
-);
-collapseCommentsInput?.addEventListener("change", async () => {
-  try {
-    await saveSettings({ collapseLongComments: collapseCommentsInput.checked });
-    showStatus("Saved");
-  } catch (error) {
-    console.error("GitHub QoL options:", error);
-    showStatus("Could not save");
-  }
-});
+// One generic binding for every checkbox the options page renders —
+// the SETTING_DEFINITIONS table in settings.js stays the single source
+// of truth for what exists.
+const settingInputs = [...document.querySelectorAll("input[data-setting]")];
+for (const input of settingInputs) {
+  bindSettingCheckbox(input, showStatus);
+}
 
 (async () => {
   const settings = await getSettings();
-  currentOrder = settings.sectionOrder.filter((id) =>
-    SECTION_IDS.includes(id),
-  );
+  // Copy: getSettings may hand back the shared DEFAULT_SETTINGS order.
+  currentOrder = [...settings.sectionOrder];
   renderList();
   renderDirection(settings.timelineOrder);
-  if (collapseInput) collapseInput.checked = Boolean(settings.collapsePrDescription);
-  if (hideCopilotInput) hideCopilotInput.checked = Boolean(settings.hideCopilotBanner);
-  if (collapseCommentsInput) {
-    collapseCommentsInput.checked = Boolean(settings.collapseLongComments);
+  for (const input of settingInputs) {
+    input.checked = Boolean(settings[input.dataset.setting]);
   }
 })().catch((error) => {
   console.error("GitHub QoL options:", error);
