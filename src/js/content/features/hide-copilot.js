@@ -25,17 +25,18 @@ function findBannerUnit(container) {
   const hidden = findHiddenBanner();
   if (hidden?.isConnected) return hidden;
 
-  const root = container ?? document;
-  const matches = findElementsByText(root, COPILOT_HINT_PATTERN, "*", {
+  // Without a container the climb below can never terminate safely (the
+  // climb must not escape to a body-level wrapper — hiding that could
+  // blank the page), so skip the full-tree text walk entirely.
+  if (!container) return null;
+
+  const matches = findElementsByText(container, COPILOT_HINT_PATTERN, "*", {
     // Never capture containers with form controls — only the callout.
     excludeContaining: "form, textarea, [contenteditable]",
   });
   if (matches.length === 0) return null;
 
   // matches are collapsed to the outermost; climb that to the flow unit.
-  // Guard against a null container (selector drift): the climb must never
-  // escape to a body-level wrapper — hiding that could blank the page.
-  if (!container) return null;
   let node = matches[0];
   while (node.parentElement && node.parentElement !== container) {
     if (node.parentElement === document.body) return null;
