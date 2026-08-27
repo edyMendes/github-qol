@@ -9,13 +9,12 @@ import {
   findTimelineItemFor,
 } from "../../../lib/placement.js";
 import { anchorBefore, restoreAtAnchor } from "../../../lib/anchor.js";
+import { insertRelativeTo, isAdjacentTo } from "./shared.js";
 import {
   findDescriptionContainer,
   findMergeBox,
-  findTimelineContainer,
   resetDomCache,
 } from "../../dom-cache.js";
-import { isPendingPostNavSwap } from "../../page.js";
 import { TIMELINE_ITEM_SELECTOR } from "../../../lib/selectors.js";
 
 const MERGEBOX_BELOW_DESC_CLASS = "gqol-mergebox-below-desc";
@@ -144,14 +143,10 @@ function resolveMergeBox(container) {
 
 function isMergeBoxPlacedAt(el, container, mode, ref) {
   const mergeBox = findMergeBox();
-  if (
-    !el?.isConnected ||
-    el.parentElement !== container ||
-    mergeBox?.getAttribute(MERGEBOX_MOVED_ATTR) !== "1"
-  ) {
-    return false;
-  }
-  return mode === "before" ? el.nextSibling === ref : el.previousSibling === ref;
+  return (
+    mergeBox?.getAttribute(MERGEBOX_MOVED_ATTR) === "1" &&
+    isAdjacentTo(el, container, mode, ref)
+  );
 }
 
 function placeMergeBox(el, container, mode, ref) {
@@ -167,16 +162,7 @@ function placeMergeBox(el, container, mode, ref) {
 
   // Anchor keyed by the partial, placed next to the row that travels.
   anchorBefore(mergeBoxAnchors, mergeBox, row, "gqol-mergebox-anchor");
-
-  if (mode === "before") {
-    container.insertBefore(row, ref ?? null);
-  } else {
-    if (ref) {
-      ref.after(row);
-    } else {
-      container.appendChild(row);
-    }
-  }
+  insertRelativeTo(row, container, mode, ref);
 
   mergeBox.setAttribute(MERGEBOX_MOVED_ATTR, "1");
   applyMergeBoxStyles(mergeBox, row.firstElementChild ?? mergeBox);
@@ -192,8 +178,6 @@ export default {
   isPlaced: isMergeBoxPlacedAt,
   place: placeMergeBox,
   cleanup: cleanupMergeBox,
-  pendingWhenMissing: () =>
-    Boolean(findTimelineContainer()) && isPendingPostNavSwap(),
   recovery: {
     expectedWhen: () => true,
     landmark: () => findMergeBox(),

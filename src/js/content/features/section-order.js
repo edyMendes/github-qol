@@ -29,6 +29,7 @@ import {
 import descriptionDescriptor from "./sections/description.js";
 import mergeboxDescriptor from "./sections/mergebox.js";
 import commentBoxDescriptor from "./sections/comment-box.js";
+import { pendingWhenPostNavSwap } from "./sections/shared.js";
 
 const DESCRIPTORS = new Map(
   [descriptionDescriptor, mergeboxDescriptor, commentBoxDescriptor].map(
@@ -89,9 +90,15 @@ function runZone(container, order, mode, place) {
     if (!descriptor) continue;
     const el = descriptor.resolve(container);
     if (!el) {
-      // An absent section is pending work only while GitHub may still
-      // be swapping the restored page in (descriptor.pendingWhenMissing).
-      if (!place && descriptor.pendingWhenMissing?.()) return true;
+      // An absent section is pending work only while GitHub may still be
+      // swapping the restored page in; descriptors may override the
+      // shared policy via pendingWhenMissing.
+      if (
+        !place &&
+        (descriptor.pendingWhenMissing?.() ?? pendingWhenPostNavSwap())
+      ) {
+        return true;
+      }
       continue;
     }
     if (descriptor.isPlaced(el, container, mode, anchor)) {

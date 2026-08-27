@@ -9,15 +9,14 @@ import {
   findElementsByText,
 } from "../../../lib/placement.js";
 import { anchorBefore, restoreAtAnchor } from "../../../lib/anchor.js";
+import { insertRelativeTo, isAdjacentTo } from "./shared.js";
 import {
   findCommentForm,
   findMergeBox,
-  findTimelineContainer,
   getTimelineItems,
   resetDomCache,
 } from "../../dom-cache.js";
 import { registerProtectedRegion } from "../../hydration.js";
-import { isPendingPostNavSwap } from "../../page.js";
 import {
   COMMENT_BOX_MOVED_ATTR,
   TIMELINE_FLOW_STOP_SELECTOR,
@@ -81,10 +80,7 @@ function resolveCommentBox(container) {
 }
 
 function isCommentBoxPlacedAt(el, container, mode, ref) {
-  if (!el?.isConnected || el.parentElement !== container) return false;
-  const adjacent =
-    mode === "before" ? el.nextSibling === ref : el.previousSibling === ref;
-  if (!adjacent) return false;
+  if (!isAdjacentTo(el, container, mode, ref)) return false;
   if (mode === "before") {
     return (
       el.getAttribute(COMMENT_BOX_MOVED_ATTR) === "1" &&
@@ -107,13 +103,7 @@ function placeCommentBox(el, container, mode, ref) {
   }
 
   anchorBefore(commentBoxAnchors, el, el, "gqol-comment-box-anchor");
-  if (mode === "before") {
-    container.insertBefore(el, ref ?? null);
-  } else if (ref) {
-    ref.after(el);
-  } else {
-    container.appendChild(el);
-  }
+  insertRelativeTo(el, container, mode, ref);
 
   if (mode === "before") {
     el.setAttribute(COMMENT_BOX_MOVED_ATTR, "1");
@@ -143,8 +133,6 @@ export default {
   isPlaced: isCommentBoxPlacedAt,
   place: placeCommentBox,
   cleanup: cleanupCommentBox,
-  pendingWhenMissing: () =>
-    Boolean(findTimelineContainer()) && isPendingPostNavSwap(),
   recovery: {
     expectedWhen: (settings) =>
       settings.sectionOrder.indexOf("commentBox") <

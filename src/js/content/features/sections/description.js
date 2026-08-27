@@ -7,16 +7,15 @@
  */
 
 import { anchorBefore, restoreAtAnchor } from "../../../lib/anchor.js";
+import { insertRelativeTo, isAdjacentTo } from "./shared.js";
 import {
   DESC_SECTION_ATTR,
   TIMELINE_FLOW_STOP_SELECTOR,
 } from "../../../lib/selectors.js";
 import {
   findDescriptionContainer,
-  findTimelineContainer,
   resetDomCache,
 } from "../../dom-cache.js";
-import { isPendingPostNavSwap } from "../../page.js";
 
 const descAnchors = new WeakMap();
 
@@ -53,25 +52,15 @@ function resolveDescription(container) {
 }
 
 function isDescriptionPlacedAt(el, container, mode, ref) {
-  if (
-    !el?.isConnected ||
-    el.parentElement !== container ||
-    el.getAttribute(DESC_SECTION_ATTR) !== "1"
-  ) {
-    return false;
-  }
-  return mode === "before" ? el.nextSibling === ref : el.previousSibling === ref;
+  return (
+    el.getAttribute(DESC_SECTION_ATTR) === "1" &&
+    isAdjacentTo(el, container, mode, ref)
+  );
 }
 
 function placeDescription(el, container, mode, ref) {
   anchorBefore(descAnchors, el, el, "gqol-desc-anchor");
-  if (mode === "before") {
-    container.insertBefore(el, ref ?? null);
-  } else if (ref) {
-    ref.after(el);
-  } else {
-    container.appendChild(el);
-  }
+  insertRelativeTo(el, container, mode, ref);
   el.setAttribute(DESC_SECTION_ATTR, "1");
   return el;
 }
@@ -95,8 +84,6 @@ export default {
   isPlaced: isDescriptionPlacedAt,
   place: placeDescription,
   cleanup: cleanupDescription,
-  pendingWhenMissing: () =>
-    Boolean(findTimelineContainer()) && isPendingPostNavSwap(),
   recovery: {
     // The description always exists on a rendered PR page; a seen one
     // that vanishes with the DOM settled means GitHub dropped our moved
