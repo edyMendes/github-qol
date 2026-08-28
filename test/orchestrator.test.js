@@ -1,10 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import {
-  init,
-  onNavigation,
-  hasExternalMutations,
-  setReloadForTests,
-} from "../src/js/content/orchestrator.js";
+import { init, onNavigation, setReloadForTests } from "../src/js/content/orchestrator.js";
+import { hasExternalMutations } from "../src/js/lib/mutations.js";
 import { resetDomCache } from "../src/js/content/dom-cache.js";
 import { invalidateCachedSettings } from "../src/js/content/settings-cache.js";
 import { requestRevalidate } from "../src/js/content/bus.js";

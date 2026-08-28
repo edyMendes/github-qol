@@ -1,7 +1,7 @@
 export const STORAGE_KEY = "githubQolSettings";
 
-export const SECTION_IDS = ["description", "mergebox", "commentBox", "timeline"];
-export const TIMELINE_ORDERS = ["newest", "oldest"];
+const SECTION_IDS = ["description", "mergebox", "commentBox", "timeline"];
+const TIMELINE_ORDERS = ["newest", "oldest"];
 
 const DEFAULT_SECTION_ORDER = [...SECTION_IDS];
 
@@ -80,7 +80,7 @@ function deriveSettings(raw) {
   return next;
 }
 
-export function normalizeSettings(raw = {}) {
+function normalizeSettings(raw = {}) {
   const derived = deriveSettings(raw);
   const normalized = {};
   for (const definition of SETTING_DEFINITIONS) {

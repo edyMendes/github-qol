@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import reverseTimelineFeature, {
-  timelineStatus,
-} from "../src/js/content/features/reverse-timeline.js";
+import reverseTimelineFeature from "../src/js/content/features/reverse-timeline.js";
 import { resetDomCache } from "../src/js/content/dom-cache.js";
 import { cancelPostChangeRetries } from "../src/js/content/hydration.js";
-import { resetStatus } from "../src/js/content/status.js";
+import {
+  clearStatusCard,
+  setProgressProvider,
+} from "../src/js/content/status.js";
 import { REVERSED_ATTR } from "../src/js/lib/selectors.js";
 
 const SETTINGS = { timelineOrder: "newest" };
@@ -65,7 +66,8 @@ afterEach(() => {
   reverseTimelineFeature.reset();
   cancelPostChangeRetries();
   resetDomCache();
-  resetStatus();
+  setProgressProvider(null);
+  clearStatusCard();
   document.body.innerHTML = "";
 });
 
@@ -127,31 +129,31 @@ describe("reverse-timeline", () => {
 describe("timelineStatus descriptor", () => {
   it("returns null when the feature setting is off", () => {
     buildPage();
-    expect(timelineStatus({ timelineOrder: "oldest" })).toBe(null);
+    expect(reverseTimelineFeature.status({ timelineOrder: "oldest" })).toBe(null);
   });
 
   it("returns null once the timeline is reversed", async () => {
     buildPage();
     await reverseTimelineFeature.apply(SETTINGS);
-    expect(timelineStatus(SETTINGS)).toBe(null);
+    expect(reverseTimelineFeature.status(SETTINGS)).toBe(null);
   });
 
   it("reports waiting while fewer than two items are rendered", () => {
     buildPage({ itemCount: 1 });
-    const descriptor = timelineStatus(SETTINGS);
+    const descriptor = reverseTimelineFeature.status(SETTINGS);
     expect(descriptor.label).toBe("Waiting for timeline…");
     expect(descriptor.indeterminate).toBe(true);
   });
 
   it("reports loading while deferred content sits outside the description", () => {
     buildPage({ skeleton: true });
-    const descriptor = timelineStatus(SETTINGS);
+    const descriptor = reverseTimelineFeature.status(SETTINGS);
     expect(descriptor.label).toBe("Loading timeline activity…");
   });
 
   it("reports preparing on a quiet, not-yet-reversed timeline", () => {
     buildPage();
-    const descriptor = timelineStatus(SETTINGS);
+    const descriptor = reverseTimelineFeature.status(SETTINGS);
     expect(descriptor.label).toBe("Preparing timeline…");
   });
 });

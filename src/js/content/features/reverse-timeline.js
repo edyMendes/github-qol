@@ -311,7 +311,7 @@ function needsWorkReverseTimeline(settings) {
  * null once the timeline is reversed (or the feature is off) — the
  * card only exists for this feature's pending work.
  */
-export function timelineStatus(settings) {
+function timelineStatus(settings) {
   if (settings.timelineOrder !== "newest" || !isPullRequestPage()) return null;
 
   const container = findTimelineContainer();

@@ -8,9 +8,9 @@
 
 import { chevronDownIcon, chevronUpIcon } from "../lib/icons.js";
 
-export const COLLAPSE_BLOCK_CLASS = "gqol-collapse-block";
-export const COLLAPSE_WRAP_CLASS = "gqol-collapse-wrap";
-export const COLLAPSE_COLLAPSED_CLASS = "gqol-collapse-collapsed";
+const COLLAPSE_BLOCK_CLASS = "gqol-collapse-block";
+const COLLAPSE_WRAP_CLASS = "gqol-collapse-wrap";
+const COLLAPSE_COLLAPSED_CLASS = "gqol-collapse-collapsed";
 export const COLLAPSE_FOOTER_CLASS = "gqol-collapse-footer";
 const COLLAPSE_EXPANDED_CLASS = "gqol-collapse-block--expanded";
 
@@ -22,7 +22,7 @@ const BTN_ICON_CLASS = "gqol-btn__icon";
  * from GitHub's design tokens — Primer's hashed CSS-module classes
  * rotate across deploys, so they must never be hardcoded.
  */
-export function buildToggleButton({ expanded = false, toggleClass = "" } = {}) {
+function buildToggleButton({ expanded = false, toggleClass = "" } = {}) {
   const button = document.createElement("button");
   button.type = "button";
   button.dataset.component = "Button";
@@ -50,7 +50,7 @@ export function buildToggleButton({ expanded = false, toggleClass = "" } = {}) {
 }
 
 /** Sync the toggle's aria state, chevron direction and label. */
-export function renderToggleButton(button, expanded) {
+function renderToggleButton(button, expanded) {
   button.setAttribute("aria-expanded", expanded ? "true" : "false");
   const visual = button.querySelector("[data-component='leadingVisual']");
   const label = button.querySelector("[data-component='text']");
@@ -128,7 +128,7 @@ export function createCollapseBlock(
  * resolve the body through their inner wrap instead. Returns the
  * restored body (or null when the container is simply removed).
  */
-export function unwrapCollapseBlock(
+function unwrapCollapseBlock(
   container,
   { expandedAttr, bodySelector, fallbackToFirstChild = false } = {},
 ) {

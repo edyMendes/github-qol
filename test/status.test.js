@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   setProgressProvider,
   renderStatus,
-  resetStatus,
+  clearStatusCard,
 } from "../src/js/content/status.js";
 
 /**
@@ -23,7 +23,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  resetStatus();
+  setProgressProvider(null);
+  clearStatusCard();
 });
 
 function card() {
@@ -103,11 +104,11 @@ describe("status renderer", () => {
     spy.mockRestore();
   });
 
-  it("resetStatus clears the card and forgets the provider", () => {
+  it("setProgressProvider(null) unregisters the provider", () => {
     setProgressProvider(() => DESCRIPTOR);
     renderStatus({});
-    resetStatus();
-    expect(card()).toBeNull();
+    expect(card()).not.toBeNull();
+    setProgressProvider(null);
     renderStatus({});
     expect(card()).toBeNull();
   });

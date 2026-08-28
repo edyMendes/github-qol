@@ -31,11 +31,9 @@ export function insertRelativeTo(el, container, mode, ref) {
 }
 
 /**
- * The default "absent section → pending work" policy: a section that
- * has not rendered counts as pending only while the post-navigation
- * swap may still be in flight and the conversation itself is rendered.
- * The engine applies this to any descriptor that does not override
- * pendingWhenMissing.
+ * The "absent section → pending work" policy: a section that has not
+ * rendered counts as pending only while the post-navigation swap may
+ * still be in flight and the conversation itself is rendered.
  */
 export function pendingWhenPostNavSwap() {
   return Boolean(findTimelineContainer()) && isPendingPostNavSwap();

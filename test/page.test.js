@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   isPullRequestPage,
   pageKey,
-  withinPostNavSwapWindow,
   markNavigationAt,
   isPendingPostNavSwap,
 } from "../src/js/content/page.js";
@@ -51,7 +50,6 @@ describe("isPendingPostNavSwap", () => {
   it("is true inside the swap window when the conversation is rendered", () => {
     buildConversation();
     markNavigationAt();
-    expect(withinPostNavSwapWindow()).toBe(true);
     expect(isPendingPostNavSwap()).toBe(true);
   });
 

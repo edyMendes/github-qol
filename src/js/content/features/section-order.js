@@ -100,14 +100,8 @@ function runZone(container, order, mode, place) {
     const el = descriptor.resolve(container);
     if (!el) {
       // An absent section is pending work only while GitHub may still be
-      // swapping the restored page in; descriptors may override the
-      // shared policy via pendingWhenMissing.
-      if (
-        !place &&
-        (descriptor.pendingWhenMissing?.() ?? pendingWhenPostNavSwap())
-      ) {
-        return true;
-      }
+      // swapping the restored page in (shared post-nav-swap policy).
+      if (!place && pendingWhenPostNavSwap()) return true;
       continue;
     }
     if (descriptor.isPlaced(el, container, mode, anchor)) {

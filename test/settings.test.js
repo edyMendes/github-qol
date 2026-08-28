@@ -3,13 +3,20 @@ import {
   STORAGE_KEY,
   SETTING_DEFINITIONS,
   DEFAULT_SETTINGS,
-  SECTION_IDS,
-  TIMELINE_ORDERS,
-  normalizeSettings,
   getSettings,
   saveSettings,
   ensureDefaultSettings,
 } from "../src/js/settings.js";
+
+/**
+ * Read settings the way the extension does after `raw` was stored —
+ * the public path through normalization (legacy shapes, invalid values
+ * and all).
+ */
+async function stored(raw) {
+  await chrome.storage.sync.set({ [STORAGE_KEY]: raw });
+  return getSettings();
+}
 
 beforeEach(() => {
   globalThis.__resetChromeStorage();
@@ -44,19 +51,23 @@ describe("SETTING_DEFINITIONS", () => {
     expect(timelineOrder.values).toEqual(["newest", "oldest"]);
     const sectionOrder = SETTING_DEFINITIONS.find((d) => d.key === "sectionOrder");
     expect(sectionOrder.type).toBe("sectionOrder");
-    expect(sectionOrder.values).toEqual(SECTION_IDS);
+    expect(sectionOrder.values).toEqual([
+      "description",
+      "mergebox",
+      "commentBox",
+      "timeline",
+    ]);
   });
 });
 
-describe("normalizeSettings", () => {
-  it("returns defaults for empty input", () => {
-    expect(normalizeSettings()).toEqual(DEFAULT_SETTINGS);
-    expect(normalizeSettings({})).toEqual(DEFAULT_SETTINGS);
+describe("stored settings are normalized", () => {
+  it("returns defaults for empty input", async () => {
+    expect(await stored({})).toEqual(DEFAULT_SETTINGS);
   });
 
-  it("keeps explicit values", () => {
+  it("keeps explicit values", async () => {
     expect(
-      normalizeSettings({
+      await stored({
         timelineOrder: "oldest",
         collapsePrDescription: false,
         sectionOrder: ["timeline", "description", "commentBox", "mergebox"],
@@ -71,85 +82,85 @@ describe("normalizeSettings", () => {
     });
   });
 
-  it("falls back per-key when a value is undefined", () => {
-    expect(normalizeSettings({ timelineOrder: "oldest" })).toEqual({
+  it("falls back per-key when a value is undefined", async () => {
+    expect(await stored({ timelineOrder: "oldest" })).toEqual({
       ...DEFAULT_SETTINGS,
       timelineOrder: "oldest",
     });
   });
 
-  it("coerces boolean values", () => {
-    expect(normalizeSettings({ collapsePrDescription: 0 })).toEqual({
+  it("coerces boolean values", async () => {
+    expect(await stored({ collapsePrDescription: 0 })).toEqual({
       ...DEFAULT_SETTINGS,
       collapsePrDescription: false,
     });
   });
 });
 
-describe("normalizeSettings: timelineOrder", () => {
-  it("keeps a valid enum value", () => {
-    expect(normalizeSettings({ timelineOrder: "oldest" }).timelineOrder).toBe("oldest");
+describe("stored timelineOrder", () => {
+  it("keeps a valid enum value", async () => {
+    expect((await stored({ timelineOrder: "oldest" })).timelineOrder).toBe("oldest");
   });
 
-  it("falls back to newest for an invalid value", () => {
-    expect(normalizeSettings({ timelineOrder: "sideways" }).timelineOrder).toBe("newest");
+  it("falls back to newest for an invalid value", async () => {
+    expect((await stored({ timelineOrder: "sideways" })).timelineOrder).toBe("newest");
   });
 
-  it("migrates legacy reverseTimeline=false to oldest", () => {
-    expect(normalizeSettings({ reverseTimeline: false }).timelineOrder).toBe("oldest");
-    expect(normalizeSettings({ reverseTimeline: true }).timelineOrder).toBe("newest");
+  it("migrates legacy reverseTimeline=false to oldest", async () => {
+    expect((await stored({ reverseTimeline: false })).timelineOrder).toBe("oldest");
+    expect((await stored({ reverseTimeline: true })).timelineOrder).toBe("newest");
   });
 });
 
-describe("normalizeSettings: sectionOrder", () => {
-  it("keeps a valid full ordering", () => {
+describe("stored sectionOrder", () => {
+  it("keeps a valid full ordering", async () => {
     const order = ["timeline", "description", "commentBox", "mergebox"];
-    expect(normalizeSettings({ sectionOrder: order }).sectionOrder).toEqual(order);
+    expect((await stored({ sectionOrder: order })).sectionOrder).toEqual(order);
   });
 
-  it("drops unknown ids, dedupes, backfills (description on top)", () => {
+  it("drops unknown ids, dedupes, backfills (description on top)", async () => {
     expect(
-      normalizeSettings({ sectionOrder: ["bogus", "timeline", "timeline", "mergebox"] })
+      (await stored({ sectionOrder: ["bogus", "timeline", "timeline", "mergebox"] }))
         .sectionOrder,
     ).toEqual(["description", "timeline", "mergebox", "commentBox"]);
   });
 
-  it("falls back to the default order for non-array input", () => {
-    expect(normalizeSettings({ sectionOrder: "nope" }).sectionOrder).toEqual([
+  it("falls back to the default order for non-array input", async () => {
+    expect((await stored({ sectionOrder: "nope" })).sectionOrder).toEqual([
       "description", "mergebox", "commentBox", "timeline",
     ]);
   });
 
-  it("migrates showMergeBoxBelowDescription=false by demoting mergebox", () => {
-    expect(normalizeSettings({ showMergeBoxBelowDescription: false }).sectionOrder).toEqual([
+  it("migrates showMergeBoxBelowDescription=false by demoting mergebox", async () => {
+    expect((await stored({ showMergeBoxBelowDescription: false })).sectionOrder).toEqual([
       "description", "commentBox", "timeline", "mergebox",
     ]);
   });
 
-  it("migrates commentBoxAtTop=false by demoting commentBox", () => {
-    expect(normalizeSettings({ commentBoxAtTop: false }).sectionOrder).toEqual([
+  it("migrates commentBoxAtTop=false by demoting commentBox", async () => {
+    expect((await stored({ commentBoxAtTop: false })).sectionOrder).toEqual([
       "description", "mergebox", "timeline", "commentBox",
     ]);
   });
 
-  it("migrates reverseTimeline=false by demoting commentBox", () => {
-    expect(normalizeSettings({ reverseTimeline: false }).sectionOrder).toEqual([
+  it("migrates reverseTimeline=false by demoting commentBox", async () => {
+    expect((await stored({ reverseTimeline: false })).sectionOrder).toEqual([
       "description", "mergebox", "timeline", "commentBox",
     ]);
   });
 
-  it("migrates v0 orders: drops copilot, inserts description at the top", () => {
+  it("migrates v0 orders: drops copilot, inserts description at the top", async () => {
     expect(
-      normalizeSettings({
+      (await stored({
         sectionOrder: ["timeline", "mergebox", "commentBox", "copilot"],
-      }).sectionOrder,
+      })).sectionOrder,
     ).toEqual(["description", "timeline", "mergebox", "commentBox"]);
   });
 });
 
-describe("normalizeSettings: legacy contraction", () => {
-  it("drops legacy booleans from the output", () => {
-    const s = normalizeSettings({ reverseTimeline: false, commentBoxAtTop: false });
+describe("legacy settings contraction", () => {
+  it("drops legacy booleans from the output", async () => {
+    const s = await stored({ reverseTimeline: false, commentBoxAtTop: false });
     expect(Object.keys(s).sort()).toEqual(
       [
         "collapseLongComments",
