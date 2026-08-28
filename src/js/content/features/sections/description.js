@@ -7,6 +7,7 @@
  */
 
 import { anchorBefore, restoreAtAnchor } from "../../../lib/anchor.js";
+import { climbFrom } from "../../../lib/placement.js";
 import { insertRelativeTo, isAdjacentTo } from "./shared.js";
 import {
   DESC_SECTION_ATTR,
@@ -37,18 +38,11 @@ function resolveDescription(container) {
   const descContainer = findDescriptionContainer();
   if (!descContainer?.isConnected) return null;
 
-  let node = descContainer;
-  while (node.parentElement && node.parentElement !== container) {
-    const parent = node.parentElement;
-    if (
-      parent === document.body ||
-      parent.matches?.(TIMELINE_FLOW_STOP_SELECTOR)
-    ) {
-      return node;
-    }
-    node = parent;
-  }
-  return node.parentElement === container ? node : null;
+  return climbFrom(descContainer, (parent) =>
+    parent === container ||
+    parent === document.body ||
+    Boolean(parent.matches?.(TIMELINE_FLOW_STOP_SELECTOR)),
+  );
 }
 
 function isDescriptionPlacedAt(el, container, mode, ref) {
@@ -66,16 +60,13 @@ function placeDescription(el, container, mode, ref) {
 }
 
 function cleanupDescription() {
-  let changed = false;
   document
     .querySelectorAll(`[${DESC_SECTION_ATTR}="1"]`)
     .forEach((unit) => {
       restoreAtAnchor(descAnchors, unit, unit);
       unit.removeAttribute(DESC_SECTION_ATTR);
-      changed = true;
     });
   resetDomCache();
-  return changed;
 }
 
 export default {

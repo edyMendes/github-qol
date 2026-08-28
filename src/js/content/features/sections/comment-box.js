@@ -113,7 +113,6 @@ function placeCommentBox(el, container, mode, ref) {
 }
 
 function cleanupCommentBox() {
-  let changed = false;
   restoreCommentFooters();
   document
     .querySelectorAll(`[${COMMENT_BOX_MOVED_ATTR}="1"]`)
@@ -121,10 +120,8 @@ function cleanupCommentBox() {
       restoreAtAnchor(commentBoxAnchors, wrapper, wrapper);
       wrapper.removeAttribute(COMMENT_BOX_MOVED_ATTR);
       wrapper.classList.remove(COMMENT_BOX_AT_TOP_CLASS);
-      changed = true;
     });
   resetDomCache();
-  return changed;
 }
 
 export default {

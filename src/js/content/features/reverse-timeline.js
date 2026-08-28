@@ -69,23 +69,37 @@ function structuralHolders(stream) {
  * Every element that must carry the visual reversal class in nested
  * mode: the structural holders plus the commit-rollup row lists (the
  * SHAs listed under "added N commits" are not timeline items — they are
- * found by their SHA-bearing elements and flipped as rows). Finding the
- * rollup lists walks each commits-log item's full subtree — keep this
- * off hot paths that can decide from the structural holders alone.
+ * found by their SHA-bearing elements and flipped as rows). The rollup
+ * walk is memoized per item element (rollupRowLists) so it runs once
+ * per item, not once per check — keep it out of hot paths that can
+ * decide from the structural holders alone anyway (isStreamApplied
+ * checks those first).
  */
 function visualHolders(stream) {
   if (!stream.nested) return [stream.parent];
   const holders = structuralHolders(stream);
   for (const item of stream.items) {
-    if (COMMIT_ROLLUP_ITEM_PATTERN.test(item.textContent || "")) {
-      holders.push(...commitRollupRowLists(item));
-    }
+    holders.push(...commitRollupRowLists(item));
   }
   return [...new Set(holders)];
 }
 
 const COMMIT_ROLLUP_ITEM_PATTERN = /added\s+\d+\s+commits/i;
 const SHA_TEXT_PATTERN = /^[0-9a-f]{7,40}$/i;
+
+// Rollup row lists memoized per commits-log item ELEMENT. The text gate
+// and the SHA-chip subtree scan run on every isStreamApplied call — in
+// the settled steady state (everything applied) that meant a full-page
+// text walk per status tick; the memo makes it once per item lifetime.
+//
+// Invalidation rides on the assumption the rest of the codebase makes
+// about GitHub's renderer (re-renders swap elements): entries die with
+// their items (WeakMap) and are revalidated before use — a cached list
+// that left its item means GitHub swapped the list, so it is
+// recomputed. Outcomes that may still change on their own (chips not
+// streamed in yet, row list not resolvable) are returned uncached so
+// later scans retry them.
+const rollupRowLists = new WeakMap();
 
 /**
  * Containers inside a commits-log item whose children are the commit
@@ -97,13 +111,26 @@ const SHA_TEXT_PATTERN = /^[0-9a-f]{7,40}$/i;
  * SHA-like code inside comment markdown lives in other items.
  */
 function commitRollupRowLists(item) {
+  const cached = rollupRowLists.get(item);
+  if (cached) {
+    if (cached.every((list) => item.contains(list))) return cached;
+    rollupRowLists.delete(item);
+  }
+  const lists = scanCommitRollupRowLists(item);
+  if (lists) rollupRowLists.set(item, lists);
+  return lists ?? [];
+}
+
+function scanCommitRollupRowLists(item) {
+  if (!COMMIT_ROLLUP_ITEM_PATTERN.test(item.textContent || "")) return [];
   const chips = [...item.querySelectorAll("*")].filter((el) =>
     SHA_TEXT_PATTERN.test((el.textContent || "").trim()),
   );
-  if (chips.length < 2) return [];
-
+  // Chips not rendered yet / no resolvable row list: null keeps the
+  // result out of the memo so the next scan retries.
+  if (chips.length < 2) return null;
   const lca = commonAncestor(chips, item);
-  if (!lca || lca === item || !item.contains(lca)) return [];
+  if (!lca || lca === item || !item.contains(lca)) return null;
   return [lca];
 }
 

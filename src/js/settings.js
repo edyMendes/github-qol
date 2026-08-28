@@ -1,6 +1,20 @@
 export const STORAGE_KEY = "githubQolSettings";
 
-const SECTION_IDS = ["description", "mergebox", "commentBox", "timeline"];
+// The rankable sections, in default order. "timeline" is the anchor
+// (the comment stream itself — not movable, but ranked among them);
+// every other id maps 1:1 to a descriptor in the section-order
+// feature. Labels live in this table so ids and their display names
+// can never drift apart — the options page renders from it.
+const SECTION_META = [
+  { id: "description", label: "PR description" },
+  { id: "mergebox", label: "Merge status box" },
+  { id: "commentBox", label: "Comment box" },
+  { id: "timeline", label: "Comments & activity" },
+];
+const SECTION_IDS = SECTION_META.map((section) => section.id);
+export const SECTION_LABELS = Object.fromEntries(
+  SECTION_META.map(({ id, label }) => [id, label]),
+);
 const TIMELINE_ORDERS = ["newest", "oldest"];
 
 const DEFAULT_SECTION_ORDER = [...SECTION_IDS];

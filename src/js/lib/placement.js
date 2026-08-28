@@ -7,15 +7,21 @@
 
 import { TIMELINE_FLOW_STOP_SELECTOR } from "./selectors.js";
 
-/** Climb from `el` through ancestors until `shouldStop` approves a parent. */
-function climbFrom(el, shouldStop) {
+/**
+ * Climb from `el` through ancestors until `shouldStop(parent, node)`
+ * approves a parent; returns the node just below that parent. Null when
+ * no ancestor satisfies the predicate (the climb topped out at the
+ * root) — callers should stop at document.body so connected elements
+ * never get there.
+ */
+export function climbFrom(el, shouldStop) {
   let node = el;
   while (node.parentElement) {
     const parent = node.parentElement;
-    if (shouldStop(parent, node)) break;
+    if (shouldStop(parent, node)) return node;
     node = parent;
   }
-  return node;
+  return null;
 }
 
 /**

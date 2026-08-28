@@ -421,6 +421,47 @@ describe("reverse-timeline: commit rollup rows inside the log group", () => {
     expect(rowList.classList.contains("gqol-timeline-reversed")).toBe(true);
   });
 
+  it("detects chip rows that stream in after the item was first scanned", async () => {
+    const page = buildRollupPage();
+    // First pass sees only the header — the rows are still deferred.
+    page.rowList.remove();
+    resetDomCache();
+    await reverseTimelineFeature.apply(SETTINGS);
+    expect(reverseTimelineFeature.needsWork(SETTINGS)).toBe(false);
+
+    // The rows land inside the still-standing item: the scan must retry
+    // the pending outcome instead of trusting a cached empty result.
+    page.bodyWrapper.appendChild(page.rowList);
+    resetDomCache();
+    expect(reverseTimelineFeature.needsWork(SETTINGS)).toBe(true);
+    await reverseTimelineFeature.apply(SETTINGS);
+    expect(page.rowList.classList.contains("gqol-timeline-reversed")).toBe(true);
+  });
+
+  it("re-computes the row list when GitHub replaces it", async () => {
+    const page = buildRollupPage();
+    await reverseTimelineFeature.apply(SETTINGS);
+    expect(reverseTimelineFeature.needsWork(SETTINGS)).toBe(false);
+
+    // React swaps the list element for a fresh one carrying new rows.
+    const freshList = document.createElement("div");
+    for (const sha of ["aaa1111", "bbb2222", "ccc3333"]) {
+      const row = document.createElement("div");
+      const title = document.createElement("span");
+      title.textContent = `commit ${sha}`;
+      const chip = document.createElement("span");
+      chip.textContent = sha;
+      row.append(title, chip);
+      freshList.appendChild(row);
+    }
+    page.rowList.replaceWith(freshList);
+    resetDomCache();
+
+    expect(reverseTimelineFeature.needsWork(SETTINGS)).toBe(true);
+    await reverseTimelineFeature.apply(SETTINGS);
+    expect(freshList.classList.contains("gqol-timeline-reversed")).toBe(true);
+  });
+
   it("never flips SHA-looking code inside comment markdown", async () => {
     const { commentsGroup } = buildRollupPage();
     // A comment quoting two SHAs in a code block — like the rollup, but

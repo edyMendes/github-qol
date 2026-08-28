@@ -109,25 +109,20 @@ function restoreMergeBox(mergeBox) {
 }
 
 function cleanupMergeBox() {
-  let changed = false;
   document
     .querySelectorAll(`[${MERGEBOX_MOVED_ATTR}="1"]`)
     .forEach((mergeBox) => {
       restoreMergeBox(mergeBox);
-      changed = true;
     });
   document.querySelectorAll(`[${MERGE_ANCHOR_ATTR}="1"]`).forEach((anchor) => {
     anchor.removeAttribute(MERGE_ANCHOR_ATTR);
-    changed = true;
   });
   document
     .querySelectorAll(`.${MERGEBOX_TIMELINE_ROW_CLASS}`)
     .forEach((row) => {
       unwrapMergeRow(row);
-      changed = true;
     });
   resetDomCache();
-  return changed;
 }
 
 /** The outer movable element as it exists right now, or null. */

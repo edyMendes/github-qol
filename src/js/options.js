@@ -1,16 +1,9 @@
-import { getSettings } from "./settings.js";
+import { getSettings, SECTION_LABELS } from "./settings.js";
 import {
   bindSettingCheckbox,
   createStatusFlash,
   saveSetting,
 } from "./settings-ui.js";
-
-const SECTION_LABELS = {
-  description: "PR description",
-  mergebox: "Merge status box",
-  commentBox: "Comment box",
-  timeline: "Comments & activity",
-};
 
 const statusEl = document.getElementById("options-status");
 const listEl = document.getElementById("section-list");
@@ -32,6 +25,8 @@ function scheduleSave() {
 function renderList() {
   listEl.innerHTML = "";
   currentOrder.forEach((id, index) => {
+    const labelText = SECTION_LABELS[id] ?? id;
+
     const row = document.createElement("li");
     row.dataset.sectionId = id;
     row.className =
@@ -45,13 +40,13 @@ function renderList() {
 
     const label = document.createElement("span");
     label.className = "flex-1 text-sm text-zinc-200";
-    label.textContent = SECTION_LABELS[id] ?? id;
+    label.textContent = labelText;
 
     const up = document.createElement("button");
     up.type = "button";
     up.dataset.move = "up";
     up.textContent = "↑";
-    up.setAttribute("aria-label", `Move ${SECTION_LABELS[id]} up`);
+    up.setAttribute("aria-label", `Move ${labelText} up`);
     up.disabled = index === 0;
     up.className = "rounded px-2 text-zinc-400 disabled:opacity-30";
     up.addEventListener("click", () => moveSection(id, -1));
@@ -60,7 +55,7 @@ function renderList() {
     down.type = "button";
     down.dataset.move = "down";
     down.textContent = "↓";
-    down.setAttribute("aria-label", `Move ${SECTION_LABELS[id]} down`);
+    down.setAttribute("aria-label", `Move ${labelText} down`);
     down.disabled = index === currentOrder.length - 1;
     down.className = "rounded px-2 text-zinc-400 disabled:opacity-30";
     down.addEventListener("click", () => moveSection(id, 1));

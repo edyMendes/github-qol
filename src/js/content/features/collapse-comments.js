@@ -13,6 +13,7 @@
 import { isMarkdownLoaded, isTallBody } from "../description.js";
 import { findDescriptionContainer, findTimelineContainer, resetDomCache } from "../dom-cache.js";
 import { DESC_SECTION_ATTR, MARKDOWN_BODY_SELECTOR } from "../../lib/selectors.js";
+import { TIMELINE_ITEM_SELECTORS } from "../../lib/timeline.js";
 import {
   COLLAPSE_FOOTER_CLASS,
   createCollapseBlock,
@@ -28,11 +29,15 @@ const COMMENT_TOGGLE_CLASS = "gqol-comment-toggle";
 const COMMENT_PROCESSED_ATTR = "data-gqol-comment-processed";
 const COMMENT_EXPANDED_ATTR = "data-gqol-comment-expanded";
 
+// Built from the shared item-selector list so a new timeline item shape
+// can never drift between the reversal and the comment scan.
+const COMMENT_BODY_SELECTOR = TIMELINE_ITEM_SELECTORS.map(
+  (itemSelector) => `${itemSelector} ${MARKDOWN_BODY_SELECTOR}`,
+).join(", ");
+
 /** Rendered comment bodies under timeline items, description excluded. */
 function findCommentBodies(container) {
-  const bodies = container.querySelectorAll(
-    `.js-timeline-item ${MARKDOWN_BODY_SELECTOR}, .TimelineItem ${MARKDOWN_BODY_SELECTOR}`,
-  );
+  const bodies = container.querySelectorAll(COMMENT_BODY_SELECTOR);
   const descContainer = findDescriptionContainer();
   return [...bodies].filter((body) => {
     // Never touch the PR description (its own feature owns it).

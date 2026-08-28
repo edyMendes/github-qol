@@ -10,7 +10,7 @@
  * text walk on later passes.
  */
 
-import { findElementsByText } from "../../lib/placement.js";
+import { climbFrom, findElementsByText } from "../../lib/placement.js";
 import { findTimelineContainer, resetDomCache } from "../dom-cache.js";
 
 const COPILOT_HINT_PATTERN = /Mention\s+@copilot\s+in\s+a\s+comment/i;
@@ -36,13 +36,14 @@ function findBannerUnit(container) {
   });
   if (matches.length === 0) return null;
 
-  // matches are collapsed to the outermost; climb that to the flow unit.
-  let node = matches[0];
-  while (node.parentElement && node.parentElement !== container) {
-    if (node.parentElement === document.body) return null;
-    node = node.parentElement;
-  }
-  return node.parentElement === container ? node : null;
+  // matches are collapsed to the outermost; climb that to the flow unit
+  // (a direct child of the container). Hitting body first means the
+  // match escaped the container's flow — never hide at that level.
+  const unit = climbFrom(
+    matches[0],
+    (parent) => parent === container || parent === document.body,
+  );
+  return unit?.parentElement === container ? unit : null;
 }
 
 function unhideAllBanners() {
@@ -80,7 +81,7 @@ function needsWorkHideCopilot(settings) {
 }
 
 function resetHideCopilot() {
-  return unhideAllBanners();
+  unhideAllBanners();
 }
 
 export default {
