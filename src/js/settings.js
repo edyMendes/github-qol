@@ -1,30 +1,114 @@
 export const STORAGE_KEY = "githubQolSettings";
 
+// The rankable sections, in default order. "timeline" is the anchor
+// (the comment stream itself — not movable, but ranked among them);
+// every other id maps 1:1 to a descriptor in the section-order
+// feature. Labels live in this table so ids and their display names
+// can never drift apart — the options page renders from it.
+const SECTION_META = [
+  { id: "description", label: "PR description" },
+  { id: "mergebox", label: "Merge status box" },
+  { id: "commentBox", label: "Comment box" },
+  { id: "timeline", label: "Comments & activity" },
+];
+const SECTION_IDS = SECTION_META.map((section) => section.id);
+export const SECTION_LABELS = Object.fromEntries(
+  SECTION_META.map(({ id, label }) => [id, label]),
+);
+const TIMELINE_ORDERS = ["newest", "oldest"];
+
+const DEFAULT_SECTION_ORDER = [...SECTION_IDS];
+
 /**
- * The single source of truth for every setting: key, default, and
- * whether the popup renders a control for it (reverseTimeline is
- * toggled by the in-page sort button instead). DEFAULT_SETTINGS and
- * the popup's checkboxes both derive from this list.
+ * The single source of truth for every setting: key, type, default,
+ * allowed values (enum/sectionOrder), and whether the popup renders a
+ * control for it. DEFAULT_SETTINGS derives from this list.
+ *
+ * Legacy stored shapes (reverseTimeline, showMergeBoxBelowDescription,
+ * commentBoxAtTop booleans) are migrated forward on read by
+ * normalizeSettings; those keys never resurface in output. Orders from
+ * older versions may also carry a now-retired "copilot" id (the banner
+ * became a show/hide toggle) and lack "description" (it became
+ * orderable) — normalizeSectionOrder drops the former and inserts the
+ * latter at the top so no one's description jumps below the timeline.
  */
 export const SETTING_DEFINITIONS = [
-  { key: "reverseTimeline", default: true, popupControlled: false },
-  { key: "collapsePrDescription", default: true, popupControlled: true },
-  { key: "showMergeBoxBelowDescription", default: true, popupControlled: true },
-  { key: "commentBoxAtTop", default: true, popupControlled: true },
+  { key: "enabled", type: "boolean", default: true, popupControlled: true },
+  { key: "timelineOrder", type: "enum", values: TIMELINE_ORDERS, default: "newest", popupControlled: false },
+  { key: "sectionOrder", type: "sectionOrder", values: SECTION_IDS, default: DEFAULT_SECTION_ORDER, popupControlled: false },
+  { key: "collapsePrDescription", type: "boolean", default: true, popupControlled: true },
+  { key: "collapseLongComments", type: "boolean", default: true, popupControlled: false },
+  { key: "hideCopilotBanner", type: "boolean", default: false, popupControlled: false },
 ];
 
 export const DEFAULT_SETTINGS = Object.fromEntries(
   SETTING_DEFINITIONS.map(({ key, default: defaultValue }) => [
     key,
-    defaultValue,
+    Array.isArray(defaultValue) ? [...defaultValue] : defaultValue,
   ]),
 );
 
-export function normalizeSettings(raw = {}) {
+/**
+ * Drop unknown ids, dedupe, and backfill missing ids: description goes
+ * to the TOP (its native spot — upgrades must not demote it), every
+ * other id appends at the end.
+ */
+function normalizeSectionOrder(value) {
+  const ids = Array.isArray(value)
+    ? value.filter((id) => SECTION_IDS.includes(id))
+    : [];
+  const unique = [...new Set(ids)];
+  for (const id of SECTION_IDS) {
+    if (unique.includes(id)) continue;
+    if (id === "description") unique.unshift(id);
+    else unique.push(id);
+  }
+  return unique;
+}
+
+/**
+ * Migrate legacy stored shapes forward: derive timelineOrder from
+ * reverseTimeline and sectionOrder from the legacy booleans. New keys
+ * win when both are present; legacy keys never appear in output.
+ */
+function deriveSettings(raw) {
+  const next = { ...raw };
+
+  if (next.timelineOrder === undefined && raw.reverseTimeline !== undefined) {
+    next.timelineOrder = raw.reverseTimeline ? "newest" : "oldest";
+  }
+
+  if (next.sectionOrder === undefined) {
+    const order = [...DEFAULT_SECTION_ORDER];
+    const demote = (id) => {
+      const index = order.indexOf(id);
+      if (index !== -1) order.push(order.splice(index, 1)[0]);
+    };
+    if (raw.showMergeBoxBelowDescription === false) demote("mergebox");
+    if (raw.commentBoxAtTop === false || raw.reverseTimeline === false) {
+      demote("commentBox");
+    }
+    next.sectionOrder = order;
+  }
+
+  return next;
+}
+
+function normalizeSettings(raw = {}) {
+  const derived = deriveSettings(raw);
   const normalized = {};
-  for (const key of Object.keys(DEFAULT_SETTINGS)) {
-    normalized[key] =
-      raw[key] !== undefined ? Boolean(raw[key]) : DEFAULT_SETTINGS[key];
+  for (const definition of SETTING_DEFINITIONS) {
+    const value = derived[definition.key];
+    if (definition.type === "enum") {
+      normalized[definition.key] = definition.values.includes(value)
+        ? value
+        : definition.default;
+    } else if (definition.type === "sectionOrder") {
+      normalized[definition.key] = normalizeSectionOrder(value);
+    } else {
+      normalized[definition.key] =
+        value !== undefined ? Boolean(value) : definition.default;
+    }
   }
   return normalized;
 }

@@ -111,4 +111,22 @@ describe("collapse-description", () => {
     expect(result).toBe(false);
     expect(document.querySelector(".gqol-desc-block")).toBeNull();
   });
+
+  it("leaves comment-block footers standing when disabled", () => {
+    // Regression: the description's undo used to sweep every collapse
+    // footer not inside a *description* block — deleting the toggles of
+    // still-active comment blocks owned by collapse-comments.
+    buildPage();
+    const foreignBlock = document.createElement("div");
+    foreignBlock.className = "gqol-collapse-block gqol-comment-block";
+    const foreignFooter = document.createElement("div");
+    foreignFooter.className = "gqol-collapse-footer";
+    foreignBlock.appendChild(foreignFooter);
+    document.querySelector(".js-discussion").appendChild(foreignBlock);
+
+    collapseFeature.apply(SETTINGS);
+    collapseFeature.apply({ collapsePrDescription: false });
+
+    expect(foreignFooter.isConnected).toBe(true);
+  });
 });

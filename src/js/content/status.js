@@ -80,9 +80,3 @@ export function renderStatus(settings) {
   );
   lastRenderKey = renderKey;
 }
-
-/** Full teardown: forget the provider and remove the card. */
-export function resetStatus() {
-  progressProvider = null;
-  clearStatusCard();
-}

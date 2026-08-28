@@ -4,7 +4,6 @@ import {
   findCommentWrapper,
   findMergeBoxUnit,
   findElementsByText,
-  isPlacedBeforeTimelineItems,
 } from "../src/js/lib/placement.js";
 
 const ITEM_SELECTOR = ".js-timeline-item";
@@ -115,50 +114,6 @@ describe("findCommentWrapper", () => {
   it("returns null for a disconnected form", () => {
     const form = el("form");
     expect(findCommentWrapper(form)).toBe(null);
-  });
-});
-
-describe("isPlacedBeforeTimelineItems", () => {
-  it("is true when the wrapper precedes all timeline items", () => {
-    const container = el("div");
-    const wrapper = el("div", "composer");
-    container.appendChild(wrapper);
-    container.appendChild(el("div", "js-timeline-item"));
-    container.appendChild(el("div", "js-timeline-item"));
-    document.body.appendChild(container);
-
-    expect(isPlacedBeforeTimelineItems(wrapper, container, ITEM_SELECTOR)).toBe(true);
-  });
-
-  it("is false when a timeline item precedes the wrapper", () => {
-    const container = el("div");
-    container.appendChild(el("div", "js-timeline-item"));
-    const wrapper = el("div", "composer");
-    container.appendChild(wrapper);
-    document.body.appendChild(container);
-
-    expect(isPlacedBeforeTimelineItems(wrapper, container, ITEM_SELECTOR)).toBe(false);
-  });
-
-  it("ignores non-timeline siblings before the wrapper", () => {
-    const container = el("div");
-    container.appendChild(el("div", "something-else"));
-    const wrapper = el("div", "composer");
-    container.appendChild(wrapper);
-    container.appendChild(el("div", "js-timeline-item"));
-    document.body.appendChild(container);
-
-    expect(isPlacedBeforeTimelineItems(wrapper, container, ITEM_SELECTOR)).toBe(true);
-  });
-
-  it("is false when the wrapper lives elsewhere", () => {
-    const container = el("div");
-    container.appendChild(el("div", "js-timeline-item"));
-    const wrapper = el("div", "composer");
-    document.body.appendChild(container);
-    document.body.appendChild(wrapper);
-
-    expect(isPlacedBeforeTimelineItems(wrapper, container, ITEM_SELECTOR)).toBe(false);
   });
 });
 

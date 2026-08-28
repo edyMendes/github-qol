@@ -1,18 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { getSettings, STORAGE_KEY } from "../src/js/settings.js";
 
-/**
- * The popup binds checkboxes generically via data-setting attributes: the
- * settings definition (key, default, popupControlled) in settings.js is
- * the single source of truth — adding a setting is one definition plus
- * one checkbox in popup.html, no popup.js edits.
- */
-
 function buildPopupDom() {
   document.body.innerHTML = `
+    <input id="gqol-master-toggle" data-setting="enabled" type="checkbox" />
     <input data-setting="collapsePrDescription" type="checkbox" />
-    <input data-setting="showMergeBoxBelowDescription" type="checkbox" />
-    <input data-setting="commentBoxAtTop" type="checkbox" />
+    <button id="open-options"></button>
     <p id="popup-status"></p>
   `;
 }
@@ -29,52 +22,71 @@ beforeEach(() => {
 });
 
 describe("popup", () => {
-  it("loads stored settings into the matching checkboxes", async () => {
+  it("loads the master toggle state from storage", async () => {
     await chrome.storage.sync.set({
-      [STORAGE_KEY]: {
-        reverseTimeline: true,
-        collapsePrDescription: false,
-        showMergeBoxBelowDescription: true,
-        commentBoxAtTop: false,
-      },
+      [STORAGE_KEY]: { enabled: false },
+    });
+    await importPopup();
+    await vi.waitFor(() => {
+      expect(
+        document.getElementById("gqol-master-toggle").checked,
+      ).toBe(false);
+    });
+  });
+
+  it("persists turning the extension off", async () => {
+    await importPopup();
+    await vi.waitFor(async () => {
+      expect(await getSettings()).toBeTruthy();
+    });
+
+    const toggle = document.getElementById("gqol-master-toggle");
+    toggle.checked = false;
+    toggle.dispatchEvent(new Event("change"));
+
+    await vi.waitFor(async () => {
+      const settings = await getSettings();
+      expect(settings.enabled).toBe(false);
+    });
+  });
+
+  it("loads the collapse state", async () => {
+    await chrome.storage.sync.set({
+      [STORAGE_KEY]: { collapsePrDescription: false },
     });
     await importPopup();
     await vi.waitFor(() => {
       expect(
         document.querySelector('[data-setting="collapsePrDescription"]').checked,
       ).toBe(false);
-      expect(
-        document.querySelector('[data-setting="showMergeBoxBelowDescription"]').checked,
-      ).toBe(true);
-      expect(
-        document.querySelector('[data-setting="commentBoxAtTop"]').checked,
-      ).toBe(false);
     });
   });
 
-  it("defaults to checked when nothing is stored", async () => {
-    await importPopup();
-    await vi.waitFor(() => {
-      for (const input of document.querySelectorAll("[data-setting]")) {
-        expect(input.checked).toBe(true);
-      }
-    });
-  });
-
-  it("persists a flip under the setting's data-setting key", async () => {
+  it("persists a collapse flip without touching direction", async () => {
     await importPopup();
     await vi.waitFor(async () => {
       expect(await getSettings()).toBeTruthy();
     });
 
-    const input = document.querySelector('[data-setting="commentBoxAtTop"]');
+    const input = document.querySelector('[data-setting="collapsePrDescription"]');
     input.checked = false;
     input.dispatchEvent(new Event("change"));
 
     await vi.waitFor(async () => {
       const settings = await getSettings();
-      expect(settings.commentBoxAtTop).toBe(false);
-      expect(settings.collapsePrDescription).toBe(true);
+      expect(settings.collapsePrDescription).toBe(false);
+      expect(settings.timelineOrder).toBe("newest");
     });
+  });
+
+  it("opens the options page from the link", async () => {
+    let opened = false;
+    chrome.runtime.openOptionsPage = () => {
+      opened = true;
+      return Promise.resolve();
+    };
+    await importPopup();
+    document.getElementById("open-options").click();
+    expect(opened).toBe(true);
   });
 });

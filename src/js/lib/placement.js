@@ -5,30 +5,23 @@
  * so they unit-test without any content-script module state.
  */
 
-import {
-  COMMENT_BOX_MOVED_ATTR,
-  TIMELINE_FLOW_STOP_SELECTOR,
-} from "./selectors.js";
+import { TIMELINE_FLOW_STOP_SELECTOR } from "./selectors.js";
 
-/** Climb from `el` through ancestors until `shouldStop` approves a parent. */
-function climbFrom(el, shouldStop) {
+/**
+ * Climb from `el` through ancestors until `shouldStop(parent, node)`
+ * approves a parent; returns the node just below that parent. Null when
+ * no ancestor satisfies the predicate (the climb topped out at the
+ * root) — callers should stop at document.body so connected elements
+ * never get there.
+ */
+export function climbFrom(el, shouldStop) {
   let node = el;
   while (node.parentElement) {
     const parent = node.parentElement;
-    if (shouldStop(parent, node)) break;
+    if (shouldStop(parent, node)) return node;
     node = parent;
   }
-  return node;
-}
-
-/**
- * The direct child of `container` marked as the moved comment box, or null.
- */
-export function findMovedCommentBox(container) {
-  return (
-    container?.querySelector(`:scope > [${COMMENT_BOX_MOVED_ATTR}="1"]`) ??
-    null
-  );
+  return null;
 }
 
 /**
@@ -70,22 +63,6 @@ export function findCommentWrapper(form, options = {}) {
       (timelineItem && parent.contains(timelineItem)) ||
       (mergeBox && parent.contains(mergeBox) && !node.contains(mergeBox)),
   );
-}
-
-/**
- * True when `wrapper` lives inside `container` with no timeline items
- * rendered before it.
- */
-export function isPlacedBeforeTimelineItems(wrapper, container, selector) {
-  if (!wrapper?.isConnected || wrapper.parentElement !== container) {
-    return false;
-  }
-  let sibling = wrapper.previousElementSibling;
-  while (sibling) {
-    if (sibling.matches(selector)) return false;
-    sibling = sibling.previousElementSibling;
-  }
-  return true;
 }
 
 /**

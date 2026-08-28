@@ -35,7 +35,7 @@ export function msSinceNavigation() {
 // (locked PRs legitimately render neither).
 const POST_NAV_SWAP_WINDOW_MS = 90000;
 
-export function withinPostNavSwapWindow() {
+function withinPostNavSwapWindow() {
   return msSinceNavigation() < POST_NAV_SWAP_WINDOW_MS;
 }
 

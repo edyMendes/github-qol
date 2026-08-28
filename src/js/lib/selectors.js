@@ -18,8 +18,18 @@ export const COMMENT_BOX_MOVED_ATTR = "data-gqol-comment-box-moved";
 // the reverse feature, its mutation observer and the status module.
 export const REVERSED_ATTR = "data-gqol-reverse";
 
+// Visual (CSS) reversal for React-era nested streams: those DOM subtrees
+// are React-owned and re-rendering reverts any node moves, so newest-first
+// flips display order instead of document order.
+export const TIMELINE_REVERSED_CLASS = "gqol-timeline-reversed";
+
 // Saved original item order on the container, for exact restore.
 export const TIMELINE_GIDS_ATTR = "data-gqol-timeline-gids";
+
+// Marks the PR description's movable unit once the section-order engine
+// owns it; the reversal excludes the marked wrapper from the item stream
+// so "newest first" can never drag the description into the comments.
+export const DESC_SECTION_ATTR = "data-gqol-desc-section";
 
 // Rendered PR-description body elements, in preference order.
 export const MARKDOWN_BODY_CLASSES = [".markdown-body", ".js-comment-body"];

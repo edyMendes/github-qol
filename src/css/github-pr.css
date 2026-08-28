@@ -1,22 +1,22 @@
-/* PR description collapse — uses GitHub Primer tokens when available */
+/* Collapsible blocks (description + comments) — GitHub Primer tokens */
 
-.gqol-desc-block {
+.gqol-collapse-block {
   margin: 0;
   scroll-margin-top: var(--header-height, 4rem);
 }
 
-.gqol-desc-wrap {
+.gqol-collapse-wrap {
   position: relative;
 }
 
-.gqol-desc-wrap .markdown-body.gqol-desc-collapsed,
-.gqol-desc-wrap .js-comment-body.gqol-desc-collapsed {
+.gqol-collapse-wrap .markdown-body.gqol-collapse-collapsed,
+.gqol-collapse-wrap .js-comment-body.gqol-collapse-collapsed {
   max-height: 10.5rem;
   overflow: hidden;
   margin-bottom: 0;
 }
 
-.gqol-desc-wrap.gqol-desc-collapsed::after {
+.gqol-collapse-wrap.gqol-collapse-collapsed::after {
   content: "";
   position: absolute;
   left: 0;
@@ -31,9 +31,9 @@
   );
 }
 
-[data-color-mode="dark"] .gqol-desc-wrap.gqol-desc-collapsed::after,
-.dark .gqol-desc-wrap.gqol-desc-collapsed::after,
-html.dark .gqol-desc-wrap.gqol-desc-collapsed::after {
+[data-color-mode="dark"] .gqol-collapse-wrap.gqol-collapse-collapsed::after,
+.dark .gqol-collapse-wrap.gqol-collapse-collapsed::after,
+html.dark .gqol-collapse-wrap.gqol-collapse-collapsed::after {
   background: linear-gradient(
     to bottom,
     transparent,
@@ -41,11 +41,11 @@ html.dark .gqol-desc-wrap.gqol-desc-collapsed::after {
   );
 }
 
-.gqol-desc-block--expanded .gqol-desc-wrap::after {
+.gqol-collapse-block--expanded .gqol-collapse-wrap::after {
   display: none;
 }
 
-.gqol-desc-footer {
+.gqol-collapse-footer {
   display: flex;
   justify-content: flex-start;
   margin-top: var(--base-size-8, 8px);
@@ -56,15 +56,20 @@ html.dark .gqol-desc-wrap.gqol-desc-collapsed::after {
   border-top: 1px solid var(--borderColor-muted, var(--color-border-muted, #d0d7de));
 }
 
-[data-color-mode="dark"] .gqol-desc-footer,
-.dark .gqol-desc-footer,
-html.dark .gqol-desc-footer {
+[data-color-mode="dark"] .gqol-collapse-footer,
+.dark .gqol-collapse-footer,
+html.dark .gqol-collapse-footer {
   border-top-color: var(--borderColor-muted, var(--color-border-muted, #30363d));
 }
 
-.gqol-desc-toggle {
+/* Show more / Show less toggle — structured like GitHub's Primer button
+   (data-component spans) with our own classes styled from Primer design
+   tokens; Primer's hashed CSS-module classes rotate across deploys. */
+
+.gqol-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--base-size-4, 4px);
   margin: 0;
   padding: var(--base-size-4, 4px) var(--base-size-8, 8px);
@@ -72,8 +77,8 @@ html.dark .gqol-desc-footer {
   font-size: var(--text-body-size-small, 12px);
   font-weight: var(--base-text-weight-medium, 500);
   line-height: var(--text-body-lineHeight-small, 18px);
-  color: var(--fgColor-accent, var(--color-accent-fg, #0969da));
-  background-color: var(--button-default-bgColor-rest, transparent);
+  color: var(--fgColor-default, var(--color-fg-default, #1f2328));
+  background-color: var(--button-default-bgColor-rest, var(--color-canvas-subtle, #f6f8fa));
   border: 1px solid var(--borderColor-default, var(--color-border-default, #d0d7de));
   border-radius: var(--borderRadius-medium, 6px);
   cursor: pointer;
@@ -83,14 +88,15 @@ html.dark .gqol-desc-footer {
     border-color 0.12s ease;
 }
 
-[data-color-mode="dark"] .gqol-desc-toggle,
-.dark .gqol-desc-toggle,
-html.dark .gqol-desc-toggle {
-  color: var(--fgColor-accent, var(--color-accent-fg, #4493f8));
+[data-color-mode="dark"] .gqol-btn,
+.dark .gqol-btn,
+html.dark .gqol-btn {
+  color: var(--fgColor-default, var(--color-fg-default, #e6edf3));
+  background-color: var(--button-default-bgColor-rest, var(--color-canvas-subtle, #212830));
   border-color: var(--borderColor-default, var(--color-border-default, #30363d));
 }
 
-.gqol-desc-toggle:hover {
+.gqol-btn:hover {
   background-color: var(
     --button-default-bgColor-hover,
     var(--color-btn-hover-bg, rgba(208, 215, 222, 0.32))
@@ -99,17 +105,41 @@ html.dark .gqol-desc-toggle {
   text-decoration: none;
 }
 
-.gqol-desc-toggle:focus-visible {
+[data-color-mode="dark"] .gqol-btn:hover,
+.dark .gqol-btn:hover,
+html.dark .gqol-btn:hover {
+  background-color: var(
+    --button-default-bgColor-hover,
+    var(--color-btn-hover-bg, rgba(110, 118, 129, 0.1))
+  );
+  border-color: var(--borderColor-accent-emphasis, var(--color-accent-emphasis, #1f6feb));
+}
+
+.gqol-btn:focus-visible {
   outline: 2px solid var(--focus-outlineColor, var(--color-accent-fg, #0969da));
   outline-offset: 2px;
 }
 
-.gqol-desc-toggle-icon {
+.gqol-btn__content {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--base-size-4, 4px);
+}
+
+.gqol-btn__visual {
+  display: inline-flex;
+}
+
+.gqol-btn__label {
+  white-space: nowrap;
+}
+
+.gqol-btn__icon {
   flex-shrink: 0;
   fill: currentColor;
 }
 
-.gqol-desc-block--expanded .gqol-desc-footer {
+.gqol-collapse-block--expanded .gqol-collapse-footer {
   border-top-color: transparent;
   padding-top: var(--base-size-4, 4px);
 }
@@ -293,113 +323,16 @@ html[data-gqol-active] .gqol-comment-box-at-top .timeline-comment-wrapper {
   margin-bottom: var(--base-size-16, 16px);
 }
 
-/* Sort direction toggle — GitLab-style row above the timeline items */
-html[data-gqol-active] .gqol-sort-row {
+/* Copilot banner hide toggle (hide-copilot feature). */
+[data-gqol-copilot-hidden="1"] {
+  display: none !important;
+}
+
+/* Visual (CSS) timeline reversal for React-era nested streams: those
+   subtrees are React-owned and re-rendering reverts node moves, so
+   newest-first flips display order instead of document order. Items
+   streamed in later surface at the top automatically. */
+.gqol-timeline-reversed {
   display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  padding: var(--base-size-4, 4px) 0 var(--base-size-8, 8px);
-}
-
-/* Oldest first (arrow up): the comment box lives at the page end, so the
-   header/list divider comes from the sort row instead — drawn right above
-   the first timeline item. Newest first keeps the comment box's own
-   border-bottom as the divider. */
-html[data-gqol-active]
-  .gqol-sort-row:has(#gqol-sort-button[aria-pressed="false"]) {
-  border-bottom: 1px solid var(--borderColor-muted, var(--color-border-muted, #d0d7de));
-}
-
-[data-color-mode="dark"] .gqol-sort-row:has(#gqol-sort-button[aria-pressed="false"]),
-.dark .gqol-sort-row:has(#gqol-sort-button[aria-pressed="false"]),
-html.dark .gqol-sort-row:has(#gqol-sort-button[aria-pressed="false"]) {
-  border-bottom-color: var(--borderColor-muted, var(--color-border-muted, #30363d));
-}
-
-/* Primer default-variant medium button (matches the merge box's
-   "Able to merge" button) — 32px tall, neutral colors, icon-only. */
-.gqol-sort-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 32px;
-  height: 32px;
-  padding: 0 8px;
-  border: 1px solid var(--borderColor-default, var(--color-border-default, #d0d7de));
-  border-radius: var(--borderRadius-medium, 6px);
-  background-color: var(
-    --button-default-bgColor-rest,
-    var(--color-canvas-default, #ffffff)
-  );
-  color: var(--fgColor-default, var(--color-fg-default, #1f2328));
-  cursor: pointer;
-  box-shadow: none;
-  transition: background-color 33ms ease-out, border-color 33ms ease-out, color 33ms ease-out;
-}
-
-[data-color-mode="dark"] .gqol-sort-button,
-.dark .gqol-sort-button,
-html.dark .gqol-sort-button {
-  border-color: var(--borderColor-default, var(--color-border-default, #30363d));
-  background-color: var(
-    --button-default-bgColor-rest,
-    var(--color-canvas-default, #0d1117)
-  );
-  color: var(--fgColor-default, var(--color-fg-default, #e6edf3));
-}
-
-/* Primer default-variant hover: neutral bg + border, no accent. */
-.gqol-sort-button:hover {
-  border-color: var(--borderColor-default, var(--color-border-default, #d0d7de));
-  color: var(--fgColor-default, var(--color-fg-default, #1f2328));
-  background-color: var(
-    --button-default-bgColor-hover,
-    var(--color-btn-hover-bg, #f3f4f6)
-  );
-}
-
-[data-color-mode="dark"] .gqol-sort-button:hover,
-.dark .gqol-sort-button:hover,
-html.dark .gqol-sort-button:hover {
-  border-color: var(--borderColor-default, var(--color-border-default, #30363d));
-  color: var(--fgColor-default, var(--color-fg-default, #e6edf3));
-  background-color: var(
-    --button-default-bgColor-hover,
-    var(--color-btn-hover-bg, rgba(177, 186, 196, 0.12))
-  );
-}
-
-/* Primer focus ring: drawn inside the button edge. */
-.gqol-sort-button:focus-visible {
-  outline: 2px solid var(--focus-outlineColor, var(--color-accent-fg, #0969da));
-  outline-offset: -1px;
-}
-
-/* Direction is communicated by the text label, so the button stays
-   neutral in both states; aria-pressed still flips for the sort-row
-   divider CSS. */
-
-/* The label, not the button, lays the icons out side by side. */
-.gqol-sort-button__label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.gqol-sort-button__icon {
-  display: block;
-  flex-shrink: 0;
-  fill: currentColor;
-}
-
-.gqol-sort-button__filter {
-  display: block;
-  flex-shrink: 0;
-  fill: currentColor;
-  transition: transform 33ms ease-out;
-}
-
-/* Oldest first (up chevron): the filter lines flip upside down. */
-.gqol-sort-button[aria-pressed="false"] .gqol-sort-button__filter {
-  transform: rotate(180deg);
+  flex-direction: column-reverse;
 }

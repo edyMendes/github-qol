@@ -18,7 +18,7 @@
  * - recovery [optional]: declares an element whose disappearance after
  *                    being seen (with the DOM settled) means GitHub
  *                    dropped our moved subtree — the page reloads once:
- *                    { expectedWhen(settings), isPresent() }.
+ *                    { expectedWhen(settings), isPresent(settings) }.
  *
  * Apply order is the array order; teardown runs reversed. Adding a
  * feature means adding one object here, not editing four call sites.
@@ -39,25 +39,12 @@ import {
   setProgressProvider,
 } from "./status.js";
 import { registerBus } from "./bus.js";
+import { hasExternalMutations } from "../lib/mutations.js";
 import collapseDescription from "./features/collapse-description.js";
-import mergeboxBelowDescription from "./features/mergebox.js";
-import commentBoxPlacement from "./features/comment-box.js";
+import collapseComments from "./features/collapse-comments.js";
+import sectionOrder from "./features/section-order.js";
 import reverseTimeline from "./features/reverse-timeline.js";
-import sortRow from "./features/sort-row.js";
-
-// Elements the extension itself renders. Mutations whose target lives
-// inside one of these must never trigger revalidation — re-applying
-// writes to them again, which would feed the observer forever.
-const GQOL_OWNED_SELECTOR = '#gqol-timeline-status, [class*="gqol-"]';
-
-/** True when at least one mutation record comes from outside our own UI. */
-export function hasExternalMutations(records) {
-  return records.some(
-    (record) =>
-      !(record.target instanceof Element) ||
-      !record.target.closest(GQOL_OWNED_SELECTOR),
-  );
-}
+import hideCopilot from "./features/hide-copilot.js";
 
 const INITIAL_RETRY_DELAYS = [0, 800, 2000, 5000, 10000, 20000, 45000];
 const OBSERVER_SETTLE_LINGER_MS = 60000;
@@ -80,15 +67,16 @@ const RECOVERY_MARKER_LIMIT = 20;
 const RECOVERY_MARKER_PREFIX = "gqol-reloaded:";
 
 // Apply order matters: collapse first (reads the description in place),
-// then the moves, then the reversal (reorders the container the others
-// live in), and finally the sort row (anchored above the comment box once
-// it has settled in its final spot).
+// then the section layout (moves whole sections around the stream),
+// then the reversal (reorders the stream the sections surround), then
+// the copilot-banner hide, and finally comment collapsing (works inside
+// settled items, independent of all placement).
 const FEATURES = [
   collapseDescription,
-  mergeboxBelowDescription,
-  commentBoxPlacement,
+  sectionOrder,
   reverseTimeline,
-  sortRow,
+  hideCopilot,
+  collapseComments,
 ];
 
 let globalMutationObserver = null;
@@ -165,7 +153,7 @@ function updateSeenElements(settings) {
     if (!feature.recovery) continue;
     if (!feature.recovery.expectedWhen(settings)) continue;
     if (seenOnPage.get(feature.name)) continue;
-    if (feature.recovery.isPresent()) seenOnPage.set(feature.name, true);
+    if (feature.recovery.isPresent(settings)) seenOnPage.set(feature.name, true);
   }
 }
 
@@ -180,7 +168,7 @@ function maybeRecoverCorruptedPage(settings) {
   if (msSinceNavigation() < RECOVERY_MIN_DELAY_MS) return false;
   for (const feature of FEATURES) {
     if (!feature.recovery?.expectedWhen(settings)) continue;
-    if (seenOnPage.get(feature.name) && !feature.recovery.isPresent()) {
+    if (seenOnPage.get(feature.name) && !feature.recovery.isPresent(settings)) {
       return reloadOncePerKey();
     }
   }
@@ -207,8 +195,7 @@ function needsWork(settings) {
 
 function resetAllFeatures() {
   // Reverse order: the reversal is undone first because it reorders the
-  // container the other features live in; the sort row is independent but
-  // comes off first for the same reason. runFeature executes sync reset
+  // container the other features live in. runFeature executes sync reset
   // fns immediately, so the order holds; runFeature never rejects.
   for (const feature of [...FEATURES].reverse()) {
     runFeature(`${feature.name} reset`, feature.reset);
@@ -230,9 +217,9 @@ function ensureGlobalObserver() {
   if (globalMutationObserver) return;
 
   globalMutationObserver = new MutationObserver((records) => {
-    // Our own UI writes (status card text, sort label) land here too;
-    // re-applying in response would rewrite them again — an endless
-    // self-sustaining loop. Only external (GitHub) mutations revalidate.
+    // Our own UI writes (status card text) land here too; re-applying in
+    // response would rewrite them again — an endless self-sustaining
+    // loop. Only external (GitHub) mutations revalidate.
     if (!hasExternalMutations(records)) return;
     // Rolling linger: stay alive while the page keeps mutating.
     // applyAll's settled branch retires it after true DOM silence.
@@ -321,6 +308,16 @@ async function runApplyPass() {
   resetDomCache();
   const settings = await getCachedSettings();
 
+  // Master toggle off: restore the native page and stand down entirely.
+  // The storage listener revalidates when it flips back on, and the
+  // navigation handler keeps watching in case the toggle changes while
+  // no PR page is open.
+  if (!settings.enabled) {
+    teardownOnNonPrPage();
+    cancelInitialRetries();
+    return false;
+  }
+
   if (await domUnsettled()) {
     ensureRetriesAndObserver();
     return false;
@@ -404,7 +401,7 @@ export function onNavigation(event) {
 }
 
 export function init() {
-  registerBus({ applyNow: applyAll, requestRevalidate: scheduleRevalidate });
+  registerBus({ requestRevalidate: scheduleRevalidate });
   for (const feature of FEATURES) {
     if (feature.status) setProgressProvider(feature.status);
   }

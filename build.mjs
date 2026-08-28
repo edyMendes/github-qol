@@ -32,6 +32,7 @@ const entries = [
   {
     entryPoints: {
       "popup.min": "src/js/popup.js",
+      "options.min": "src/js/options.js",
       "background.min": "src/js/background.js",
     },
     ...common,
