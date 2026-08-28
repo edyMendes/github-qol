@@ -12,7 +12,7 @@ export const COLLAPSE_BLOCK_CLASS = "gqol-collapse-block";
 export const COLLAPSE_WRAP_CLASS = "gqol-collapse-wrap";
 export const COLLAPSE_COLLAPSED_CLASS = "gqol-collapse-collapsed";
 export const COLLAPSE_FOOTER_CLASS = "gqol-collapse-footer";
-export const COLLAPSE_EXPANDED_CLASS = "gqol-collapse-block--expanded";
+const COLLAPSE_EXPANDED_CLASS = "gqol-collapse-block--expanded";
 
 const BTN_ICON_CLASS = "gqol-btn__icon";
 

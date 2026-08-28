@@ -14,7 +14,7 @@ import { findElementsByText } from "../../lib/placement.js";
 import { findTimelineContainer, resetDomCache } from "../dom-cache.js";
 
 const COPILOT_HINT_PATTERN = /Mention\s+@copilot\s+in\s+a\s+comment/i;
-export const COPILOT_HIDDEN_ATTR = "data-gqol-copilot-hidden";
+const COPILOT_HIDDEN_ATTR = "data-gqol-copilot-hidden";
 
 function findHiddenBanner() {
   return document.querySelector(`[${COPILOT_HIDDEN_ATTR}="1"]`);

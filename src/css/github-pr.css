@@ -139,7 +139,7 @@ html.dark .gqol-btn:hover {
   fill: currentColor;
 }
 
-.gqol-desc-block--expanded .gqol-desc-footer {
+.gqol-collapse-block--expanded .gqol-collapse-footer {
   border-top-color: transparent;
   padding-top: var(--base-size-4, 4px);
 }
